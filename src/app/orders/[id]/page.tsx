@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireRole } from '@/utils/auth/require-role';
 import { createClient } from '@/utils/supabase/server';
+import { ResubmitForm } from './ResubmitForm';
 
 type Params = Promise<{ id: string }>;
 
@@ -236,6 +237,25 @@ export default async function OrderDetailPage(props: { params: Params }) {
 
           {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
+            {/* Resubmission Form - Only show if needs_revision */}
+            {order.status === 'needs_revision' && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Action Required
+                </h3>
+                <p className="text-sm text-gray-700 mb-4">
+                  Your order requires revision. Please upload a corrected PO to resubmit.
+                </p>
+                {order.admin_feedback && (
+                  <div className="mb-4 p-3 bg-white border border-orange-200 rounded">
+                    <p className="text-sm font-medium text-gray-900 mb-1">Admin Notes:</p>
+                    <p className="text-sm text-gray-700">{order.admin_feedback}</p>
+                  </div>
+                )}
+                <ResubmitForm orderId={order.id} />
+              </div>
+            )}
+
             {/* PO Download */}
             {poDownloadUrl && (
               <div className="bg-white border border-gray-200 rounded-lg p-6">

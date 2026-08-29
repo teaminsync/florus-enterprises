@@ -44,6 +44,65 @@ This document tracks completed work across project checkpoints.
 
 ---
 
+## Checkpoint 6: Admin Order Review & Resubmission Loop
+**Completed:** August 29, 2026
+
+### What Was Built
+- **Admin order management**: `/admin/orders` list page with status filtering (pending_verification, approved, rejected, needs_revision, fulfilled) and order counts summary
+- **Admin order detail page**: `/admin/orders/[id]` with PO preview (iframe for PDF, img for images) and download button using signed URLs
+- **Admin actions**: Four distinct status transitions via client component with optimistic UI—approve, reject, needs_revision (with feedback), fulfilled
+- **Status transition validation**: Server-side guards prevent illegal transitions using `canAdminTransition()` helper; every action re-fetches current order status before proceeding
+- **Trade user resubmission**: When order status is `needs_revision`, trade user sees resubmission form on `/orders/[id]` page to upload corrected PO (transitions back to `pending_verification`)
+- **Status history tracking**: All transitions logged to `order_status_history` with `changed_by` (profile.id of admin or trade user who triggered change)
+
+### Status Transition Flow
+```
+pending_verification → approved | rejected | needs_revision (admin only)
+needs_revision → pending_verification (trade user resubmission only)
+approved → fulfilled (admin only)
+rejected → (terminal)
+fulfilled → (terminal)
+```
+
+### Key Technical Decisions
+- **Admin client pattern**: All admin actions use `createAdminClient()` (service_role key, bypasses RLS) with explicit authorization checks in Server Actions—avoids fourth round of grant/policy debugging
+- **Double-fetch pattern**: Every status transition re-fetches the order's current status from database before applying change (never trusts client-rendered state, prevents race conditions from stale/double-submitted forms)
+- **PO preview with dual signed URLs**: One signed URL without download disposition for inline preview (iframe/img), separate URL with download param for explicit download button
+- **Resubmission workflow**: New PO upload preserves old file (timestamped path), clears `admin_feedback` field, resets status to `pending_verification`, inserts history entry with trade user as `changed_by`
+
+### Files Created
+- `src/utils/orders/transitions.ts` - Status transition rules (ADMIN_ACTIONABLE_STATUSES, canAdminTransition, canTradeUserResubmit), status label/color helpers
+- `src/app/admin/orders/page.tsx` - Admin orders list with filter tabs and counts
+- `src/app/admin/orders/[id]/page.tsx` - Admin order detail with PO preview and download
+- `src/app/admin/orders/[id]/OrderActions.tsx` - Client component with four admin action forms
+- `src/app/admin/orders/[id]/actions.ts` - Server Actions: approveOrderAction, rejectOrderAction, markNeedsRevisionAction, markFulfilledAction
+- `src/app/orders/[id]/ResubmitForm.tsx` - Client component for trade user PO resubmission (shown only when status=needs_revision)
+- `src/app/orders/[id]/actions.ts` - Server Action: resubmitOrderAction (verifies ownership, status, uploads new PO)
+
+### Files Modified
+- `src/app/admin/page.tsx` - Added pending/needs_revision order counts and links to orders management
+
+### Testing Performed
+- **Schema bug found and fixed**: Both admin order pages were selecting `email` from `profiles` join (column doesn't exist); fixed by fetching email separately from `auth.users` via `getUserById()`. Both pages verified to load without errors.
+- **Full lifecycle test**: Created real trade user and 4 orders, exercised all transitions (approve, reject, needs_revision→resubmit, approve→fulfilled). Real order_status_history rows confirmed correct user attribution and chronological order:
+  - Order 1: `pending_verification → approved` (by admin)
+  - Order 2: `pending_verification → rejected` (by admin, with feedback)
+  - Order 3: `pending_verification → needs_revision → pending_verification` (admin marked, trade user resubmitted, feedback cleared)
+  - Order 4: `pending_verification → approved → fulfilled` (both by admin)
+- **Guard verification**: 
+  - Illegal transition: Attempting to approve rejected order correctly blocked ("Cannot transition from rejected to approved")
+  - Resubmission wrong status: Attempting to resubmit approved order correctly blocked ("Cannot resubmit order with status approved")
+  - Resubmission wrong owner: Ownership check verified—order.user_id !== authenticated user would block action
+- **Test data cleanup**: All test orders, profiles, and auth users deleted after verification
+
+### Security Notes
+- All admin mutations use service_role client with explicit role verification via `requireRole('admin')`
+- Every transition validates current status server-side before proceeding (double-fetch pattern)
+- Trade user resubmission verifies order ownership (`order.user_id === user.id`) and status before allowing upload
+- File validation enforced: PDF/JPG/PNG only, 10MB max, same constraints as initial checkout
+
+---
+
 ## Checkpoint 5: Trade Pricing, Cart & Checkout
 **Completed:** August 28, 2026
 
@@ -77,9 +136,7 @@ This document tracks completed work across project checkpoints.
 - Cart: `src/app/cart/page.tsx`, `src/app/cart/CartItemRow.tsx`, `src/app/cart/actions.ts` (updateCartItemAction, removeCartItemAction)
 - Checkout: `src/app/checkout/page.tsx`, `src/app/checkout/CheckoutForm.tsx`, `src/app/checkout/actions.ts` (submitOrderAction with mixed GST fix)
 - Orders: `src/app/orders/page.tsx`, `src/app/orders/[id]/page.tsx`
-- Scripts: `scripts/test-pricing.ts`, `scripts/test-price-snapshot.ts`, `scripts/test-mixed-gst.ts`
 - Migrations: `supabase/migrations/20260828084948_cart_items_rls_and_grants.sql`, `supabase/migrations/20260828085820_storage_po_uploads_bucket.sql`, `supabase/migrations/20260828090112_orders_rls_and_grants.sql`
-- Documentation: `MIXED_GST_VERIFICATION.md` (test scenario for mixed-rate orders)
 - Updated: `supabase/migrations/20260827081728_grant_public_read_privileges.sql` (added service_role grants)
 
 ### Testing Performed
