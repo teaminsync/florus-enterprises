@@ -10,3 +10,7 @@
 grant usage on schema public to anon, authenticated;
 grant select on public.categories to anon, authenticated;
 grant select on public.products to anon, authenticated;
+
+-- service_role needs full access for admin operations and testing scripts
+grant select, insert, update, delete on public.products to service_role;
+grant select, insert, update, delete on public.categories to service_role;

@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
+import { getSessionUser } from '@/utils/auth/get-session-user';
+import { calculateTradePrice } from '@/utils/pricing';
 
 type SearchParams = Promise<{
   category?: string;
@@ -14,8 +16,12 @@ export default async function MedicinesPage(props: {
   const searchQuery = searchParams.q;
 
   const supabase = await createClient();
+  
+  // Check if user is logged in as trade
+  const sessionUser = await getSessionUser();
+  const isTradeUser = sessionUser?.role === 'trade';
 
-  // Build the query
+  // Build the query - include sp and gst_percent for trade pricing
   let query = supabase
     .from('products')
     .select(`
@@ -25,6 +31,9 @@ export default async function MedicinesPage(props: {
       composition,
       pack_size,
       mrp,
+      sp,
+      gst_percent,
+      is_upcoming,
       category_id,
       categories (
         name,
@@ -172,17 +181,43 @@ export default async function MedicinesPage(props: {
                     </p>
                   )}
 
-                  {product.mrp && (
-                    <p className="text-lg font-semibold text-gray-900">
-                      ₹{product.mrp.toFixed(2)}
-                    </p>
+                  {/* Pricing display - trade vs MRP */}
+                  {isTradeUser ? (
+                    product.sp !== null ? (
+                      <div className="space-y-1">
+                        <p className="text-lg font-semibold text-[#009EE0]">
+                          ₹{calculateTradePrice(product.sp).toFixed(2)}
+                          <span className="text-xs font-normal text-gray-500 ml-1">
+                            (ex-GST)
+                          </span>
+                        </p>
+                        {product.mrp && (
+                          <p className="text-sm text-gray-500 line-through">
+                            MRP: ₹{product.mrp.toFixed(2)}
+                          </p>
+                        )}
+                        <p className="text-sm text-[#009EE0] font-medium mt-2">
+                          Click to view details & add to cart →
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-amber-600 font-medium">
+                        Pricing coming soon
+                      </p>
+                    )
+                  ) : (
+                    product.mrp && (
+                      <p className="text-lg font-semibold text-gray-900">
+                        ₹{product.mrp.toFixed(2)}
+                      </p>
+                    )
                   )}
 
                   {/* Category badge */}
-                  {product.categories && (
+                  {product.categories && typeof product.categories === 'object' && 'name' in product.categories && (
                     <div className="mt-3 pt-3 border-t border-gray-100">
                       <span className="text-xs text-gray-500">
-                        {(product.categories as { name: string }).name}
+                        {String(product.categories.name)}
                       </span>
                     </div>
                   )}
