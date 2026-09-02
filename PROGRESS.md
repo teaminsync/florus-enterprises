@@ -44,6 +44,32 @@ This document tracks completed work across project checkpoints.
 
 ---
 
+## Checkpoint 7: Full Catalog Import
+**Completed:** September 2, 2026
+
+### What Was Built
+- **Full product catalog**: Imported all 228 products from Florus's six source price lists (Axera Nexxon, GRPPL Critical Care, GRPPL Franchisee, Axera Trion, Axera Critical Care, Axera Spectrum) via single migration file
+- **Product count by brand line** (verified via actual query): Axera Critical Care (8) + Axera Nexxon (60) + Axera Spectrum (68) + Axera Trion (19, including 11 launched + 8 upcoming) + Sorvus Franchisee (73) = 228 total
+- **Upcoming products**: 8 Axera Trion products with `is_upcoming = true` and `sp = null` (pricing not yet finalized)
+
+### Key Technical Notes
+- **GRPPL duplicate sheet**: GRPPL Critical Care Franchisee (4-product sheet) contributes zero new rows — every SAP code (5050807, 5043146, 5040019, 5040287) is a verbatim duplicate already present in GRPPL Franchisee sheet; confirmed by cross-checking before import
+- **TELMICLAR SAP-code conflict** (flagged for Florus): Axera Trion sheet lists two distinct products ("TELMICLAR AM TAB 40/5MG,15'S" and "TELMICLAR TAB 40MG,15'S") both under SAP code 5602597; since `sap_code` has unique constraint, "TELMICLAR TAB 40MG" was imported with `sap_code = NULL` rather than guessing — Florus must provide correct distinct SAP code before this matters for ordering/invoicing
+- **ON CONFLICT strategy**: Migration uses `ON CONFLICT (sap_code) DO NOTHING` so the 23 products from Checkpoint 2's sample seed are preserved unchanged (not duplicated or overwritten); NULL sap_codes never conflict under unique constraint
+
+### Files Created
+- `supabase/migrations/20260902060354_full_catalog_import.sql` - Single migration with all 228 products transcribed verbatim from source PDFs
+
+### Verification Performed
+- Total product count: 228 ✓
+- Products with null sap_code: 1 (TELMICLAR TAB conflict) ✓
+- Upcoming products: 8 (all Axera Trion with null sp) ✓
+- Spot-checked 3 new products (ACTINAC-MR TAB, ACOSIL D, LIVAPENEM 1GM INJ) — composition, category, MRP, SP all match migration file exactly ✓
+- Build verification: `npm run build` passes cleanly ✓
+- Site functionality: `/medicines` page displays correct product count, category filtering works across full 228-product catalog ✓
+
+---
+
 ## Checkpoint 6: Admin Order Review & Resubmission Loop
 **Completed:** August 29, 2026
 
