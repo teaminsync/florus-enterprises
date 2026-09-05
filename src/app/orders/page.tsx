@@ -55,7 +55,7 @@ export default async function OrdersPage() {
           </div>
         ) : (
           /* Orders list */
-          <div className="space-y-4">
+          <div className="space-y-6">
             {orders.map((order) => {
               const statusKey = order.status as keyof typeof STATUS_COLORS;
               const statusColor = STATUS_COLORS[statusKey] || 'bg-gray-100 text-gray-800';
@@ -67,9 +67,9 @@ export default async function OrdersPage() {
                   href={`/orders/${order.id}`}
                   className="block bg-white border border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <h3 className="text-lg font-semibold text-gray-900">
                           Order #{order.id.slice(0, 8).toUpperCase()}
                         </h3>

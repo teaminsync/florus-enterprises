@@ -79,14 +79,14 @@ export default async function ProductPage(props: { params: Params }) {
           <span className="text-gray-900">{product.name}</span>
         </nav>
 
-        <div className="max-w-4xl">
+        <div className="max-w-4xl mx-auto">
           {/* Product Header */}
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">
               {product.name}
             </h1>
 
-            {/* Category Link */}
+            {/* Category Badge */}
             {product.categories && typeof product.categories === 'object' && 'slug' in product.categories && 'name' in product.categories && (
               <Link
                 href={`/medicines?category=${String(product.categories.slug)}`}
@@ -98,12 +98,12 @@ export default async function ProductPage(props: { params: Params }) {
           </div>
 
           {/* Product Details Grid */}
-          <div className="bg-gray-50 rounded-lg p-8 mb-8">
+          <div className="bg-gray-50 rounded-lg p-6 md:p-8 mb-8">
             <div className="grid md:grid-cols-2 gap-8">
               {/* Left Column */}
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-sm font-medium text-gray-500 mb-2">
+                  <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
                     Composition
                   </h2>
                   <p className="text-gray-900">{product.composition}</p>
@@ -111,7 +111,7 @@ export default async function ProductPage(props: { params: Params }) {
 
                 {product.dosage_form && (
                   <div>
-                    <h2 className="text-sm font-medium text-gray-500 mb-2">
+                    <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
                       Dosage Form
                     </h2>
                     <p className="text-gray-900 capitalize">{product.dosage_form}</p>
@@ -120,7 +120,7 @@ export default async function ProductPage(props: { params: Params }) {
 
                 {product.pack_size && (
                   <div>
-                    <h2 className="text-sm font-medium text-gray-500 mb-2">
+                    <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
                       Pack Size
                     </h2>
                     <p className="text-gray-900">{product.pack_size}</p>
@@ -129,7 +129,7 @@ export default async function ProductPage(props: { params: Params }) {
 
                 {product.case_size && (
                   <div>
-                    <h2 className="text-sm font-medium text-gray-500 mb-2">
+                    <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
                       Case Size
                     </h2>
                     <p className="text-gray-900">{product.case_size}</p>
@@ -141,7 +141,7 @@ export default async function ProductPage(props: { params: Params }) {
               <div className="space-y-6">
                 {product.manufacturer && (
                   <div>
-                    <h2 className="text-sm font-medium text-gray-500 mb-2">
+                    <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
                       Manufacturer
                     </h2>
                     <p className="text-gray-900">{product.manufacturer}</p>
@@ -150,7 +150,7 @@ export default async function ProductPage(props: { params: Params }) {
 
                 {product.brand_line && (
                   <div>
-                    <h2 className="text-sm font-medium text-gray-500 mb-2">
+                    <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
                       Brand Line
                     </h2>
                     <p className="text-gray-900">{product.brand_line}</p>
@@ -159,17 +159,17 @@ export default async function ProductPage(props: { params: Params }) {
 
                 {product.sap_code && (
                   <div>
-                    <h2 className="text-sm font-medium text-gray-500 mb-2">
+                    <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
                       SAP Code
                     </h2>
-                    <p className="text-gray-900 font-mono">{product.sap_code}</p>
+                    <p className="text-gray-900 font-mono text-sm">{product.sap_code}</p>
                   </div>
                 )}
 
-                {/* Pricing - show trade price for trade users, MRP for everyone */}
+                {/* Pricing */}
                 <div>
-                  <h2 className="text-sm font-medium text-gray-500 mb-2">
-                    {isTradeUser ? 'Trade Price' : 'Maximum Retail Price (MRP)'}
+                  <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    {isTradeUser ? 'Trade Price' : 'Maximum Retail Price'}
                   </h2>
                   {isTradeUser ? (
                     product.sp !== null ? (
@@ -177,14 +177,11 @@ export default async function ProductPage(props: { params: Params }) {
                         <p className="text-3xl font-bold text-[#009EE0]">
                           ₹{calculateTradePrice(product.sp).toFixed(2)}
                         </p>
-                        <p className="text-sm text-gray-500">
-                          Price shown is GST-exclusive
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          GST: {product.gst_percent}%
+                        <p className="text-sm text-gray-600">
+                          Price shown is GST-exclusive • {product.gst_percent}% GST applies
                         </p>
                         {product.mrp && (
-                          <p className="text-sm text-gray-400 line-through">
+                          <p className="text-sm text-gray-500 line-through">
                             MRP: ₹{product.mrp.toFixed(2)}
                           </p>
                         )}
@@ -208,11 +205,11 @@ export default async function ProductPage(props: { params: Params }) {
 
           {/* CTA Section */}
           {isTradeUser ? (
-            <div className="bg-green-50 border border-green-100 rounded-lg p-6">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Ready to order?
               </h3>
-              <p className="text-gray-600 mb-4">
+              <p className="text-gray-700 mb-4">
                 Add this product to your cart to place an order at trade pricing.
               </p>
               <AddToCartForm
@@ -222,11 +219,11 @@ export default async function ProductPage(props: { params: Params }) {
               />
             </div>
           ) : (
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Interested in institutional pricing?
+                Interested in trade pricing?
               </h3>
-              <p className="text-gray-600 mb-4">
+              <p className="text-gray-700 mb-4">
                 Healthcare professionals and institutions can access special trade pricing for bulk orders.
               </p>
               <Link

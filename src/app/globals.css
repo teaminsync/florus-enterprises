@@ -24,3 +24,44 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/*
+  Florus Enterprises Design Reference
+  =====================================
+  Premium, minimalist, restrained design system.
+  
+  TYPOGRAPHY SCALE:
+  - Page H1 (hero):     text-5xl font-bold (48px) — home hero only
+  - Page H1 (standard): text-4xl font-bold (36px) — all other pages
+  - Section H2:         text-2xl font-semibold (24px)
+  - Card/Item H3:       text-lg font-semibold (18px)
+  - Body text:          text-base (16px)
+  - Secondary text:     text-sm text-gray-600 (14px)
+  - Caption/meta:       text-xs text-gray-500 (12px)
+  
+  SPACING RHYTHM:
+  - Page container:     py-12 (standard), py-16 (marketing pages: home/about/contact)
+  - Section gaps:       space-y-6 or gap-6 (24px) — standard vertical rhythm
+  - Card padding:       p-6 (24px) — all cards
+  - Card gaps:          gap-6 in grids (24px)
+  - Container max:      max-w-4xl (standard single column), max-w-6xl (dashboard/admin)
+  
+  COLOR USAGE:
+  - Brand blue #009EE0: Interactive elements only (buttons, links, hover states, focus rings)
+  - Never as large background fills — used sparingly for visual restraint
+  - Primary button:     bg-[#009EE0] hover:bg-[#0088c7]
+  - Secondary button:   border border-gray-300 text-gray-700 hover:bg-gray-50
+  
+  CARD STYLE (Standard):
+  - Border:     border border-gray-200
+  - Radius:     rounded-lg
+  - Padding:    p-6
+  - Hover:      hover:border-[#009EE0] hover:shadow-md
+  - Shadow:     No default shadow; shadow-md on hover only
+  
+  RESPONSIVE BREAKPOINTS:
+  - Mobile-first approach
+  - Single column by default
+  - md: (768px+) for 2-column layouts
+  - lg: (1024px+) for 3-column grids and complex layouts
+*/

@@ -153,7 +153,7 @@ export default async function MedicinesPage(props: {
 
         {/* Product Grid */}
         {products && products.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {products.map((product) => {
               // Truncate composition to ~100 characters
               const truncatedComposition = 
@@ -196,9 +196,6 @@ export default async function MedicinesPage(props: {
                             MRP: ₹{product.mrp.toFixed(2)}
                           </p>
                         )}
-                        <p className="text-sm text-[#009EE0] font-medium mt-2">
-                          Click to view details & add to cart →
-                        </p>
                       </div>
                     ) : (
                       <p className="text-sm text-amber-600 font-medium">
@@ -226,10 +223,18 @@ export default async function MedicinesPage(props: {
             })}
           </div>
         ) : (
-          <div className="text-center py-12">
-            <p className="text-gray-500">
+          <div className="text-center py-12 bg-gray-50 rounded-lg">
+            <p className="text-gray-500 mb-4">
               No products found matching your criteria.
             </p>
+            {(activeCategory || searchQuery) && (
+              <Link
+                href="/medicines"
+                className="text-[#009EE0] hover:underline font-medium"
+              >
+                View all products
+              </Link>
+            )}
           </div>
         )}
       </div>

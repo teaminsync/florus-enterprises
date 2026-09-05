@@ -3,8 +3,8 @@ import Link from 'next/link';
 export default function AuthErrorPage() {
   return (
     <div className="bg-white min-h-screen">
-      <div className="container mx-auto px-4 py-16 max-w-md text-center">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">
+      <div className="container mx-auto px-4 py-12 max-w-md text-center">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
           Authentication Error
         </h1>
         <p className="text-gray-600 mb-8">

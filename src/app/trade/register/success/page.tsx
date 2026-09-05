@@ -3,7 +3,7 @@ import Link from 'next/link';
 export default function RegistrationSuccessPage() {
   return (
     <div className="bg-white min-h-screen">
-      <div className="container mx-auto px-4 py-16 max-w-2xl text-center">
+      <div className="container mx-auto px-4 py-12 max-w-2xl text-center">
         <div className="mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full">
             <svg
@@ -22,7 +22,7 @@ export default function RegistrationSuccessPage() {
           </div>
         </div>
 
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
           Application Received
         </h1>
         

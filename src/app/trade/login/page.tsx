@@ -23,8 +23,8 @@ export default function LoginPage() {
 
   return (
     <div className="bg-white min-h-screen">
-      <div className="container mx-auto px-4 py-16 max-w-md">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+      <div className="container mx-auto px-4 py-12 max-w-md">
+        <h1 className="text-4xl font-bold text-gray-900 mb-2">
           Sign In
         </h1>
         <p className="text-gray-600 mb-8">

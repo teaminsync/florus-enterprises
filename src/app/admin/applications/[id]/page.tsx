@@ -29,11 +29,11 @@ export default async function ApplicationDetailPage(props: { params: Params }) {
 
   return (
     <div className="bg-white min-h-screen">
-      <div className="container mx-auto px-4 py-16 max-w-4xl">
+      <div className="container mx-auto px-4 py-12 max-w-4xl">
         <div className="mb-8">
           <Link
             href="/admin/applications"
-            className="text-sm text-[#009EE0] hover:underline mb-4 inline-block"
+            className="text-[#009EE0] hover:text-[#0088c7] font-medium inline-block mb-4"
           >
             ← Back to Applications
           </Link>

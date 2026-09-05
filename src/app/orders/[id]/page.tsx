@@ -135,7 +135,7 @@ export default async function OrderDetailPage(props: { params: Params }) {
           {/* Order Items */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white border border-gray-200 rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-6">
                 Order Items
               </h2>
 
@@ -199,7 +199,7 @@ export default async function OrderDetailPage(props: { params: Params }) {
             {/* Status History */}
             {statusHistory && statusHistory.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                <h2 className="text-2xl font-semibold text-gray-900 mb-6">
                   Status History
                 </h2>
 

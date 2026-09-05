@@ -32,11 +32,11 @@ export default async function AdminApplicationsPage() {
 
   return (
     <div className="bg-white min-h-screen">
-      <div className="container mx-auto px-4 py-16 max-w-6xl">
+      <div className="container mx-auto px-4 py-12 max-w-6xl">
         <div className="mb-8">
           <Link
             href="/admin"
-            className="text-sm text-[#009EE0] hover:underline mb-4 inline-block"
+            className="text-[#009EE0] hover:text-[#0088c7] font-medium inline-block mb-4"
           >
             ← Back to Dashboard
           </Link>

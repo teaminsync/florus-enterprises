@@ -6,7 +6,7 @@ export default function AboutPage() {
           About Florus Enterprises
         </h1>
 
-        <div className="prose prose-lg max-w-none space-y-6 text-gray-600">
+        <div className="prose prose-lg max-w-none space-y-6 text-gray-700">
           <p>
             Florus Enterprises is a trusted name in pharmaceutical wholesale and distribution, serving healthcare professionals, institutions, and retail pharmacies with a comprehensive range of quality medicines and healthcare products. With years of experience in the industry, we have built a reputation for reliability, competitive pricing, and exceptional service.
           </p>

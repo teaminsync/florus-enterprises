@@ -10,6 +10,22 @@ export async function Header() {
     .select('slug, name')
     .order('display_order');
 
+  // Check session and user role
+  const { data: { user } } = await supabase.auth.getUser();
+  let userRole: string | null = null;
+  let userName: string | null = null;
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, full_name')
+      .eq('id', user.id)
+      .single();
+    
+    userRole = profile?.role || null;
+    userName = profile?.full_name || null;
+  }
+
   return (
     <header className="bg-white border-b border-gray-200">
       <div className="container mx-auto px-4">
@@ -59,15 +75,56 @@ export async function Header() {
             >
               Contact
             </Link>
+
+            {/* Authenticated user links */}
+            {userRole === 'trade' && (
+              <>
+                <Link 
+                  href="/cart"
+                  className="text-gray-700 hover:text-[#009EE0] transition-colors"
+                >
+                  Cart
+                </Link>
+                <Link 
+                  href="/orders"
+                  className="text-gray-700 hover:text-[#009EE0] transition-colors"
+                >
+                  Orders
+                </Link>
+              </>
+            )}
+
+            {userRole === 'admin' && (
+              <Link 
+                href="/admin"
+                className="text-gray-700 hover:text-[#009EE0] transition-colors"
+              >
+                Admin
+              </Link>
+            )}
           </nav>
 
-          {/* CTA */}
-          <Link
-            href="/trade/register"
-            className="px-4 py-2 text-sm font-medium text-[#009EE0] bg-white border border-[#009EE0] rounded-md hover:bg-gray-50 transition-colors"
-          >
-            Healthcare Professional? Register for institutional pricing
-          </Link>
+          {/* CTA / User Menu */}
+          {!user ? (
+            <Link
+              href="/trade/register"
+              className="px-4 py-2 text-sm font-medium text-[#009EE0] bg-white border border-[#009EE0] rounded-md hover:bg-gray-50 transition-colors"
+            >
+              Register for Trade Pricing
+            </Link>
+          ) : (
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-600">
+                {userName || user.email}
+              </span>
+              <Link
+                href={userRole === 'admin' ? '/admin' : '/trade/dashboard'}
+                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              >
+                {userRole === 'admin' ? 'Dashboard' : 'Account'}
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </header>

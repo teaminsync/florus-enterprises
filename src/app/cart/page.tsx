@@ -121,7 +121,7 @@ export default async function CartPage() {
             {/* Order Summary */}
             <div className="lg:col-span-1">
               <div className="bg-gray-50 rounded-lg p-6 sticky top-4">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                <h2 className="text-2xl font-semibold text-gray-900 mb-6">
                   Order Summary
                 </h2>
 

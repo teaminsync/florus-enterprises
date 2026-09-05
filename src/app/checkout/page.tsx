@@ -100,7 +100,7 @@ export default async function CheckoutPage() {
           {/* Order Summary */}
           <div className="lg:col-span-2">
             <div className="bg-gray-50 rounded-lg p-6 mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-6">
                 Order Summary
               </h2>
 
@@ -141,7 +141,7 @@ export default async function CheckoutPage() {
 
             {/* PO Upload Form */}
             <div className="bg-white border border-gray-200 rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-3">
                 Purchase Order
               </h2>
               <p className="text-sm text-gray-600 mb-6">
@@ -156,24 +156,24 @@ export default async function CheckoutPage() {
           {/* Sidebar Info */}
           <div className="lg:col-span-1">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 sticky top-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 What happens next?
               </h3>
               <ol className="space-y-3 text-sm text-gray-700">
-                <li className="flex gap-2">
-                  <span className="font-semibold text-blue-600">1.</span>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-blue-600 flex-shrink-0">1.</span>
                   <span>Your order will be submitted for verification</span>
                 </li>
-                <li className="flex gap-2">
-                  <span className="font-semibold text-blue-600">2.</span>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-blue-600 flex-shrink-0">2.</span>
                   <span>Our team will review your PO and order details</span>
                 </li>
-                <li className="flex gap-2">
-                  <span className="font-semibold text-blue-600">3.</span>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-blue-600 flex-shrink-0">3.</span>
                   <span>You'll receive confirmation once approved</span>
                 </li>
-                <li className="flex gap-2">
-                  <span className="font-semibold text-blue-600">4.</span>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-blue-600 flex-shrink-0">4.</span>
                   <span>Your order will be processed and dispatched</span>
                 </li>
               </ol>

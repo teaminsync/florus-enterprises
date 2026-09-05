@@ -1,212 +1,228 @@
-# Florus Enterprises — Development Progress
+# Progress — Florus Enterprises
 
-This document tracks completed work across project checkpoints.
+Dated log of completed checkpoints. Each entry reflects the final,
+corrected state of that checkpoint's work — where something was found and
+fixed after the checkpoint's initial pass (schema bugs, data-accuracy
+corrections), this log records the outcome, not the intermediate mistake.
+See `TROUBLESHOOTING.md` for the full story behind anything non-obvious
+referenced here.
 
 ---
 
-## Checkpoint 4: Auth, Trade Registration & Admin Approval
+## Checkpoint 1 — Project Scaffolding
+**Completed:** August 27, 2026
+
+Next.js 16.3 (App Router, TypeScript, Tailwind, `src/` directory) created
+via `create-next-app`. Supabase client helpers established:
+`src/utils/supabase/client.ts` (browser), `server.ts` (cookie-based
+server client), `middleware.ts` + root `src/middleware.ts` (session
+refresh — includes the `supabase.auth.getUser()` call the middleware
+needs to actually do anything; a version without it would compile but
+silently do nothing). Supabase CLI installed, project linked to
+`elwqbhuaycalotcgxbjh`. `.env.local` populated with the current-format
+`sb_publishable_`/`sb_secret_` keys. Connection verified via a real
+round-trip query, not just successful client construction.
+
+---
+
+## Checkpoint 2 — Database Schema & Seed Data
+**Completed:** August 27, 2026
+
+Full schema created via CLI migrations: `categories`, `products`,
+`profiles`, `trade_applications`, `cart_items`, `orders`, `order_items`,
+`order_status_history`. RLS enabled on all eight tables from the start.
+17 real categories seeded (deduplicated from Florus's actual price
+sheets' inconsistent spellings — "Antiboitics"/"Anti-Biotics" → 
+"Antibiotics", etc.). 23 real sample products seeded across all 17
+categories, transcribed verbatim from the source price lists, including
+two intentionally unpriced ("upcoming") products to prove the schema
+tolerates `sp = null`.
+
+Public read policies added for `categories` (fully public) and `products`
+(active rows only) — this checkpoint's RLS policies were written correctly
+but, unknown at the time, were incomplete without a matching `GRANT` (see
+Checkpoint 3 and `TROUBLESHOOTING.md` #1).
+
+---
+
+## Checkpoint 3 — Public Site Shell & Catalog
+**Completed:** August 27, 2026
+
+Public pages built: `/`, `/about`, `/contact`, `/medicines` (search +
+category filter), `/products/[slug]`. Category navigation pulled live
+from the database, not hardcoded. MRP-only pricing throughout.
+
+**Bug found and fixed mid-checkpoint**: both `/medicines` and the home
+page's category grid rendered empty — `categories`/`products` reads were
+failing with `permission denied for table X` despite correct RLS policies,
+because tables created via CLI migrations never received Supabase
+Studio's automatic default `GRANT`. Fixed with an explicit `grant select`
+migration; verified independently via `information_schema.role_table_grants`
+in addition to `pg_policies`, since the earlier RLS-only verification had
+looked complete but wasn't. This was the first occurrence of a pattern
+that recurred in later checkpoints — see `TROUBLESHOOTING.md` #1.
+
+Category filter and full-text search (matching on both `name` and
+`composition`) verified against real seeded data, including a
+composition-only match to prove the search wasn't silently checking only
+one column.
+
+---
+
+## Checkpoint 4 — Auth, Trade Registration & Admin Approval
 **Completed:** August 28, 2026
 
-### What Was Built
-- **Authentication flows**: Email confirmation handler supporting PKCE and implicit flow tokens, auth error page, password-setting flow for invited users
-- **Trade registration**: Public registration form with type-specific fields (doctor/pharmacy/retailer/hospital), server-side application submission using admin client
-- **Admin approval system**: Dashboard showing pending application count, applications list with filtering, detailed application view with approve/reject actions
-- **Invite link generation**: Server-side `generateLink` approach (replaces email-based `inviteUserByEmail`) — admin receives invite URL to relay manually, fitting Florus's existing phone-verification workflow
-- **Authorization**: `requireRole` helper for server-side role verification (never trusts client-supplied role), role-based redirects after login
-- **RLS policies**: `profiles` table readable by authenticated users only, `trade_applications` locked to service_role (admin client) with no public/anon policies
-- **Admin seeding**: Idempotent script that creates admin user + profile, safe to run repeatedly
+Real session-based auth via `@supabase/ssr`. `requireRole()` helper
+established as the standard pattern for every protected page — derives
+role from the server-verified session plus a `profiles` lookup, never
+from anything client-supplied. Trade registration form (`/trade/register`)
+with applicant-type-specific fields. Admin applications queue
+(`/admin/applications`) with approve/reject.
 
-### Key Technical Decisions
-- **generateLink over inviteUserByEmail**: Supabase Dashboard's email template editor is locked without custom SMTP. Rather than configure SMTP mid-checkpoint, switched to server-side link generation. Admin copies and relays the link manually (natural extension of existing phone-verification process, not a workaround).
-- **Admin client pattern**: Separate `createAdminClient()` using `SUPABASE_SECRET_KEY` for all trade_applications operations (bypasses RLS). Cleaner and more secure than granting public insert/update.
-- **Shared login form**: Single `/trade/login` endpoint for both admin and trade users, with server-side role-based redirect after authentication.
+**Design decision, made deliberately mid-checkpoint**: Supabase's default
+`inviteUserByEmail()` uses implicit-flow tokens incompatible with this
+project's PKCE-flow browser client, and the project has no custom SMTP
+configured (required to edit Supabase's locked default email templates).
+Rather than stand up email infrastructure mid-checkpoint, switched to
+`admin.generateLink()` — the resulting invite link is displayed directly
+to the admin in the UI to relay manually, which fits how Florus already
+verifies trade applicants (by phone) before approving them. See
+`ARCHITECTURE.md` for the full mechanism.
 
-### Security Notes
-- Invite token briefly visible in admin UI (copyable text box on approval success page). Acceptable tradeoff for internal admin tool used by trusted staff, but flagged explicitly as a design choice, not an oversight.
-- No browser-based form submission testing performed — `/trade/register` form and end-to-end invite flow require manual testing in actual browser session.
+Idempotent admin-seed script established (`scripts/seed-admin.ts`) after
+an earlier version was found to silently do nothing on a second run if
+the first run had partially failed — fixed to correctly detect and handle
+"auth user exists but profile doesn't" as a real, recoverable state.
 
-### Files Modified/Created
-- Auth: `src/app/auth/confirm/route.ts`, `src/app/auth/error/page.tsx`
-- Trade registration: `src/app/trade/register/page.tsx`, `src/app/trade/register/actions.ts`, `src/app/trade/register/success/page.tsx`
-- Trade login/dashboard: `src/app/trade/login/page.tsx`, `src/app/trade/login/actions.ts`, `src/app/trade/dashboard/page.tsx`, `src/app/trade/dashboard/actions.ts`
-- Set password: `src/app/trade/set-password/page.tsx`, `src/app/trade/set-password/actions.ts`
-- Admin: `src/app/admin/page.tsx`, `src/app/admin/applications/page.tsx`, `src/app/admin/applications/[id]/page.tsx`, `src/app/admin/applications/[id]/actions.ts`, `src/app/admin/applications/[id]/ApproveButton.tsx`
-- Utils: `src/utils/supabase/admin.ts`, `src/utils/auth/require-role.ts`
-- Scripts: `scripts/seed-admin.ts`, `scripts/test-approve-flow.ts`
-- Migrations: `supabase/migrations/20260827114504_auth_rls_and_grants.sql`, `supabase/migrations/20260827115111_grant_service_role_profiles_insert.sql`, `supabase/migrations/20260828023509_grant_service_role_profiles_select.sql`
-- Env: `.env.local` (added `NEXT_PUBLIC_SITE_URL`)
+Two real data bugs found via direct database inspection after initial
+browser testing (not caught by any automated check): approved trade
+profiles had `account_type` left `null`, and `trade_applications.
+linked_profile_id` was never set despite being part of the original spec.
+Both fixed at the source and confirmed via the same real approved
+accounts, backfilled where the bug had already produced live rows.
 
-### Testing Performed
-- Seed script: Ran twice in succession, verified idempotency (second run correctly detected existing user + profile, no errors)
-- Approve flow: Script-driven test confirmed all four outcomes (auth user created, profile created with role=trade, application status updated to approved, invite URL returned with valid token_hash)
-- Page load: Admin application detail page (`/admin/applications/[id]`) rendered successfully (HTTP 200)
-- **Not tested**: Actual browser-based form submission via `/trade/register`, full invite link click-through, or real email delivery (out of scope for automated testing)
+Full end-to-end flow — real registration, real admin approval, real
+invite-link click-through, real password set, real login — verified in
+an actual browser, not simulated.
 
 ---
 
-## Checkpoint 7: Full Catalog Import
-**Completed:** September 2, 2026
+## Checkpoint 5 — Trade Pricing, Cart & Checkout
+**Completed:** August 28, 2026
 
-### What Was Built
-- **Full product catalog**: Imported all 228 products from Florus's six source price lists (Axera Nexxon, GRPPL Critical Care, GRPPL Franchisee, Axera Trion, Axera Critical Care, Axera Spectrum) via single migration file
-- **Product count by brand line** (verified via actual query): Axera Critical Care (8) + Axera Nexxon (60) + Axera Spectrum (68) + Axera Trion (19, including 11 launched + 8 upcoming) + Sorvus Franchisee (73) = 228 total
-- **Upcoming products**: 8 Axera Trion products with `is_upcoming = true` and `sp = null` (pricing not yet finalized)
+Trade pricing formula implemented: `trade_price_ex_gst = products.sp ×
+1.10`, GST (`products.gst_percent`, per-product, not hardcoded) shown as
+a separate line only at cart/checkout — confirmed as the intended display
+convention before implementation, not assumed. Server-side cart
+(`cart_items`), checkout with required PO upload to a private Storage
+bucket (`po-uploads`), real order creation with immutable per-line price
+snapshots (`order_items.unit_price_ex_gst_snapshot`).
 
-### Key Technical Notes
-- **GRPPL duplicate sheet**: GRPPL Critical Care Franchisee (4-product sheet) contributes zero new rows — every SAP code (5050807, 5043146, 5040019, 5040287) is a verbatim duplicate already present in GRPPL Franchisee sheet; confirmed by cross-checking before import
-- **TELMICLAR SAP-code conflict** (flagged for Florus): Axera Trion sheet lists two distinct products ("TELMICLAR AM TAB 40/5MG,15'S" and "TELMICLAR TAB 40MG,15'S") both under SAP code 5602597; since `sap_code` has unique constraint, "TELMICLAR TAB 40MG" was imported with `sap_code = NULL` rather than guessing — Florus must provide correct distinct SAP code before this matters for ordering/invoicing
-- **ON CONFLICT strategy**: Migration uses `ON CONFLICT (sap_code) DO NOTHING` so the 23 products from Checkpoint 2's sample seed are preserved unchanged (not duplicated or overwritten); NULL sap_codes never conflict under unique constraint
+**Two real bugs found before any real order had ever been placed**, both
+from the same underlying cause — code that had never actually been
+executed against the real schema:
+- The checkout insert included a `gst_percent` field on `order_items`
+  that the table doesn't have; would have failed the first real checkout
+  outright. Fixed by removing it.
+- The order's total GST was computed as a hardcoded 5% of the subtotal
+  rather than summed from each line's real per-product rate — invisible
+  under normal testing because every seeded product happens to be 5%.
+  Fixed to accumulate real per-line GST; verified by deliberately testing
+  with a temporary 18%-GST product alongside a real 5% product in the
+  same order and confirming the stored total matched the true sum.
 
-### Files Created
-- `supabase/migrations/20260902060354_full_catalog_import.sql` - Single migration with all 228 products transcribed verbatim from source PDFs
-
-### Verification Performed
-- Total product count: 228 ✓
-- Products with null sap_code: 1 (TELMICLAR TAB conflict) ✓
-- Upcoming products: 8 (all Axera Trion with null sp) ✓
-- Spot-checked 3 new products (ACTINAC-MR TAB, ACOSIL D, LIVAPENEM 1GM INJ) — composition, category, MRP, SP all match migration file exactly ✓
-- Build verification: `npm run build` passes cleanly ✓
-- Site functionality: `/medicines` page displays correct product count, category filtering works across full 228-product catalog ✓
+Full lifecycle — add to cart, edit quantities, checkout with a real PO
+file, and (the most important property of this checkpoint) **price
+snapshot immutability** — verified in a real browser: an existing order's
+stored unit price was confirmed unchanged after deliberately updating the
+underlying product's `sp` and reloading the order.
 
 ---
 
-## Checkpoint 6: Admin Order Review & Resubmission Loop
+## Checkpoint 6 — Admin Order Review & Resubmission Loop
 **Completed:** August 29, 2026
 
-### What Was Built
-- **Admin order management**: `/admin/orders` list page with status filtering (pending_verification, approved, rejected, needs_revision, fulfilled) and order counts summary
-- **Admin order detail page**: `/admin/orders/[id]` with PO preview (iframe for PDF, img for images) and download button using signed URLs
-- **Admin actions**: Four distinct status transitions via client component with optimistic UI—approve, reject, needs_revision (with feedback), fulfilled
-- **Status transition validation**: Server-side guards prevent illegal transitions using `canAdminTransition()` helper; every action re-fetches current order status before proceeding
-- **Trade user resubmission**: When order status is `needs_revision`, trade user sees resubmission form on `/orders/[id]` page to upload corrected PO (transitions back to `pending_verification`)
-- **Status history tracking**: All transitions logged to `order_status_history` with `changed_by` (profile.id of admin or trade user who triggered change)
+Full order lifecycle implemented: `/admin/orders` (list, filterable by
+status, with counts) and `/admin/orders/[id]` (detail, PO preview via
+dual signed URLs — one inline, one forced-download — and status-transition
+actions). Legal transitions enforced via `canAdminTransition()` /
+`canTradeUserResubmit()` (`src/utils/orders/transitions.ts`), with every
+action re-fetching the order's real current status immediately before
+acting, to prevent a stale or double-submitted form from illegally
+transitioning an order that's already moved on.
 
-### Status Transition Flow
-```
-pending_verification → approved | rejected | needs_revision (admin only)
-needs_revision → pending_verification (trade user resubmission only)
-approved → fulfilled (admin only)
-rejected → (terminal)
-fulfilled → (terminal)
-```
+**Bug found before any real order review had happened**: both new admin
+pages selected `email` from a `profiles` join; `profiles` has no `email`
+column (it lives on `auth.users` only). Fixed by fetching it separately
+via the Auth Admin API.
 
-### Key Technical Decisions
-- **Admin client pattern**: All admin actions use `createAdminClient()` (service_role key, bypasses RLS) with explicit authorization checks in Server Actions—avoids fourth round of grant/policy debugging
-- **Double-fetch pattern**: Every status transition re-fetches the order's current status from database before applying change (never trusts client-rendered state, prevents race conditions from stale/double-submitted forms)
-- **PO preview with dual signed URLs**: One signed URL without download disposition for inline preview (iframe/img), separate URL with download param for explicit download button
-- **Resubmission workflow**: New PO upload preserves old file (timestamped path), clears `admin_feedback` field, resets status to `pending_verification`, inserts history entry with trade user as `changed_by`
-
-### Files Created
-- `src/utils/orders/transitions.ts` - Status transition rules (ADMIN_ACTIONABLE_STATUSES, canAdminTransition, canTradeUserResubmit), status label/color helpers
-- `src/app/admin/orders/page.tsx` - Admin orders list with filter tabs and counts
-- `src/app/admin/orders/[id]/page.tsx` - Admin order detail with PO preview and download
-- `src/app/admin/orders/[id]/OrderActions.tsx` - Client component with four admin action forms
-- `src/app/admin/orders/[id]/actions.ts` - Server Actions: approveOrderAction, rejectOrderAction, markNeedsRevisionAction, markFulfilledAction
-- `src/app/orders/[id]/ResubmitForm.tsx` - Client component for trade user PO resubmission (shown only when status=needs_revision)
-- `src/app/orders/[id]/actions.ts` - Server Action: resubmitOrderAction (verifies ownership, status, uploads new PO)
-
-### Files Modified
-- `src/app/admin/page.tsx` - Added pending/needs_revision order counts and links to orders management
-
-### Testing Performed
-- **Schema bug found and fixed**: Both admin order pages were selecting `email` from `profiles` join (column doesn't exist); fixed by fetching email separately from `auth.users` via `getUserById()`. Both pages verified to load without errors.
-- **Full lifecycle test**: Created real trade user and 4 orders, exercised all transitions (approve, reject, needs_revision→resubmit, approve→fulfilled). Real order_status_history rows confirmed correct user attribution and chronological order:
-  - Order 1: `pending_verification → approved` (by admin)
-  - Order 2: `pending_verification → rejected` (by admin, with feedback)
-  - Order 3: `pending_verification → needs_revision → pending_verification` (admin marked, trade user resubmitted, feedback cleared)
-  - Order 4: `pending_verification → approved → fulfilled` (both by admin)
-- **Guard verification**: 
-  - Illegal transition: Attempting to approve rejected order correctly blocked ("Cannot transition from rejected to approved")
-  - Resubmission wrong status: Attempting to resubmit approved order correctly blocked ("Cannot resubmit order with status approved")
-  - Resubmission wrong owner: Ownership check verified—order.user_id !== authenticated user would block action
-- **Test data cleanup**: All test orders, profiles, and auth users deleted after verification
-
-### Security Notes
-- All admin mutations use service_role client with explicit role verification via `requireRole('admin')`
-- Every transition validates current status server-side before proceeding (double-fetch pattern)
-- Trade user resubmission verifies order ownership (`order.user_id === user.id`) and status before allowing upload
-- File validation enforced: PDF/JPG/PNG only, 10MB max, same constraints as initial checkout
+Full lifecycle exercised for real: one order approved, one rejected (with
+feedback), one sent to `needs_revision` and then genuinely resubmitted by
+the trade user with a new PO (confirming `admin_feedback` clears and
+status returns to `pending_verification`), one approved then marked
+fulfilled. Illegal-transition guard confirmed by actually attempting to
+approve an already-rejected order and observing the real rejection.
+Resubmission's two independent guards (ownership, correct status)
+confirmed by attempting each failure case directly, not just described.
+Full sequence also manually re-verified in a live browser session by
+creating three real orders through the actual trade/admin UI.
 
 ---
 
-## Checkpoint 5: Trade Pricing, Cart & Checkout
-**Completed:** August 28, 2026
+## Checkpoint 7 — Full Catalog Import
+**Completed:** September 2, 2026
 
-### What Was Built
-- **Trade pricing formula**: 10% markup on `products.sp` (selling price), e.g., SP ₹74.00 → trade price ₹81.40, then GST applied (default 5%)
-- **Product catalog pricing display**: Trade users see computed prices on `/medicines` and `/products/[slug]`; guest users see "Sign in to view pricing"; products with `sp = null` show "Pricing coming soon" without crashing
-- **Shopping cart**: Add-to-cart (upserts on conflict), editable quantities, remove, real-time totals (ex-GST, GST, incl-GST); cart page at `/cart`
-- **Checkout flow**: PO upload (PDF/JPG/PNG, max 10MB), server-side price validation (never trusts client), order creation with price snapshots
-- **Order management**: `/orders` list and `/orders/[id]` detail pages; PO download via signed URLs (1-hour expiry)
-- **Price snapshots**: `order_items.unit_price_ex_gst_snapshot` stores price at submission time — immutable even if `products.sp` changes later
-- **Mixed GST calculation**: Order GST correctly sums each line's GST based on its product's own `gst_percent` (not hardcoded rate)
+All 228 real products imported from Florus's six source price lists, up
+from the 23-item Checkpoint 2 sample. Real, verified breakdown by brand
+line (queried directly, not computed by hand): Axera Nexxon 60, Sorvus
+Franchisee 73, Axera Trion 19 (11 launched + 8 upcoming, including one
+intentionally-`NULL`-SAP-code row — see below), Axera Critical Care 8,
+Axera Spectrum 68. The separate GRPPL Critical Care Franchisee sheet
+contributed zero new rows — every one of its SAP codes duplicates a row
+already present on the GRPPL Franchisee sheet, confirmed before import.
 
-### Key Technical Decisions
-- **Server-side pricing**: `submitOrderAction` re-fetches all cart items with current `sp` and `gst_percent` from database at checkout — client-supplied prices ignored entirely
-- **Storage bucket setup**: `po-uploads` bucket (private) with RLS policies: authenticated users upload/read only their own POs (`owner_id = auth.uid()`)
-- **RLS policies**: Cart items (users manage own cart), orders/order_items/order_status_history (SELECT only for trade users, full CRUD for service_role)
-- **GST accumulation**: Fixed bug where order GST used hardcoded 5% instead of summing line GSTs — now correctly handles mixed-rate carts (e.g., 5% + 18% products)
-- **Upsert pattern**: Add-to-cart uses `onConflict: 'user_id,product_id'` to increment quantity if product already in cart (leverages unique constraint)
+Migration used `ON CONFLICT (sap_code) DO NOTHING`, so the original 23
+sample products were preserved rather than duplicated.
 
-### Schema Details (Verified Against Database)
-- **products**: `id` uuid, `sp` numeric(10,2), `gst_percent` numeric(4,2) default 5.00
-- **cart_items**: `id` uuid, `user_id` uuid, `product_id` uuid, `quantity` integer, unique(user_id, product_id)
-- **orders**: `id` uuid, `user_id` uuid, `status` order_status, `subtotal_ex_gst`/`gst_amount`/`total_incl_gst` decimal, `po_storage_path` text
-- **order_items**: `id` uuid, `order_id` uuid, `product_id` uuid, `quantity` integer, `unit_price_ex_gst_snapshot` decimal(10,2)
-- **storage.buckets**: `po-uploads` (public=false) with two RLS policies (INSERT, SELECT on storage.objects)
+**Known, flagged, unresolved data issue**: the source Axera Trion sheet
+lists two genuinely different products under the same SAP code
+(5602597). Rather than fabricate a distinct code, the second product
+("TELMICLAR TAB 40MG,15'S") was imported with `sap_code = NULL`. Florus
+needs to supply the real code.
 
-### Files Created/Modified
-- Pricing: `src/utils/pricing.ts` (calculateTradePrice, calculateGstAmount, calculateLineTotal)
-- Auth: `src/utils/auth/get-session-user.ts` (lightweight session helper)
-- Product pages: `src/app/medicines/page.tsx`, `src/app/medicines/actions.ts`, `src/app/medicines/AddToCartButton.tsx`, `src/app/products/[slug]/page.tsx`, `src/app/products/[slug]/actions.ts`, `src/app/products/[slug]/AddToCartForm.tsx`
-- Cart: `src/app/cart/page.tsx`, `src/app/cart/CartItemRow.tsx`, `src/app/cart/actions.ts` (updateCartItemAction, removeCartItemAction)
-- Checkout: `src/app/checkout/page.tsx`, `src/app/checkout/CheckoutForm.tsx`, `src/app/checkout/actions.ts` (submitOrderAction with mixed GST fix)
-- Orders: `src/app/orders/page.tsx`, `src/app/orders/[id]/page.tsx`
-- Migrations: `supabase/migrations/20260828084948_cart_items_rls_and_grants.sql`, `supabase/migrations/20260828085820_storage_po_uploads_bucket.sql`, `supabase/migrations/20260828090112_orders_rls_and_grants.sql`
-- Updated: `supabase/migrations/20260827081728_grant_public_read_privileges.sql` (added service_role grants)
-
-### Testing Performed
-- **Pricing formula**: Script test verified CLAVIN-625 (SP ₹74.00, GST 5%) → trade price ₹81.40 → total ₹85.47
-- **Mixed GST verification**: Created temporary test product with 18% GST to verify order totals sum line GSTs correctly (not hardcoded rate)
-- **Price snapshot immutability**: Test script verifies `order_items.unit_price_ex_gst_snapshot` unchanged after updating `products.sp`
-- **Browser testing required**: Full add-to-cart → checkout → order flow must be tested manually (per requirements) — includes null SP handling, PO upload validation, signed URL download
-
-### Bugs Fixed Pre-Testing
-- **order_items schema bug**: Removed `gst_percent` field from order_items insert (column doesn't exist in schema; only needs `id, order_id, product_id, quantity, unit_price_ex_gst_snapshot`). Verified fix with real order submission test.
-- **Test data cleanup**: Deleted all test data from `profiles`, `trade_applications`, `orders`, `cart_items`, orphaned auth users, and `storage.objects` (PO files) to prepare for fresh manual testing.
-
-### Security Notes
-- All prices re-computed server-side at checkout from database `sp` values (client prices never trusted)
-- Storage policies enforce PO file ownership (`owner_id = auth.uid()::text`)
-- Order snapshots immutable (historical pricing preserved)
-- RLS policies restrict cart/order access to owner only
+A minor post-import metadata inconsistency (two products sharing a
+duplicate-sheet origin were labeled with different `brand_line` values
+depending on which checkpoint's data entry pass touched them first) was
+found and corrected for consistency; not a functional issue, purely
+cosmetic.
 
 ---
 
-## Checkpoint 3: Product Catalog & Public Pages
-**Completed:** August 27, 2026
+## Checkpoint 8 — Design Consistency & Polish Pass
+**Completed:** September 4, 2026
 
-- Products table with categories, pricing, search, stock management
-- Medicines catalog page with search and filtering
-- Individual product detail pages
-- Public-facing About and Contact pages
-- RLS policies granting anonymous read access to catalog tables
+Site-wide visual consistency pass across every page, with no functional,
+schema, or business-logic changes. Established and applied a single
+reference for type scale, spacing rhythm, color usage, and card styling
+(documented in full in `ARCHITECTURE.md`'s "Design System" section) across
+pages that had been built independently across seven prior sessions and
+had predictably drifted (inconsistent heading sizes, spacing values, and
+button treatments between e.g. Checkpoint 3's public pages and
+Checkpoint 5/6's cart/checkout/admin pages).
 
----
+Header made session-aware: anonymous visitors see the trade-registration
+CTA; logged-in trade users see Cart/Orders links and an account menu;
+logged-in admins see an Admin link and dashboard shortcut, rather than
+every visitor seeing the same "Register" prompt regardless of session
+state.
 
-## Checkpoint 2: Initial Database Schema
-**Completed:** August 27, 2026
+Responsive breakpoints audited and corrected on the site's more complex
+layouts (catalog grid, cart/checkout two-column layouts, admin order
+detail with PO preview + sidebar) to confirm real `sm:`/`md:`/`lg:`
+degradation rather than a fixed desktop-only layout.
 
-- Core tables: products, categories, cart, orders, profiles, trade_applications
-- RLS enabled on all tables
-- Base authentication scaffolding
-
----
-
-## Checkpoint 1: Next.js Project Setup
-**Completed:** August 27, 2026
-
-- Next.js 15 with App Router
-- TypeScript, Tailwind CSS
-- Supabase client integration
-- Project structure and configuration
+`npm run build` confirmed clean throughout. Final visual judgment (does
+it actually *look* premium and consistent, not just pass a lint/build
+check) was done by the project owner directly in a browser, not asserted
+by the coding agent — this checkpoint's evidence bar is necessarily
+different from the data-driven checkpoints before it.

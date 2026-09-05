@@ -73,11 +73,11 @@ export default async function AdminOrdersPage(props: { searchParams: SearchParam
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-12">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-3xl font-bold text-gray-900">Order Management</h1>
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-4xl font-bold text-gray-900">Order Management</h1>
             <Link
               href="/admin"
               className="text-[#009EE0] hover:text-[#0088c7] font-medium"
@@ -88,8 +88,8 @@ export default async function AdminOrdersPage(props: { searchParams: SearchParam
 
           {/* Status summary */}
           {statusCounts && (
-            <div className="bg-white rounded-lg shadow-sm p-4">
-              <h2 className="text-sm font-medium text-gray-700 mb-3">Order Summary</h2>
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Summary</h2>
               <div className="flex flex-wrap gap-4">
                 <Link
                   href="/admin/orders"

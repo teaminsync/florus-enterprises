@@ -102,7 +102,7 @@ export default async function AdminOrderDetailPage(props: { params: Params }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-12">
         {/* Header */}
         <div className="mb-8">
           <Link
@@ -113,7 +113,7 @@ export default async function AdminOrderDetailPage(props: { params: Params }) {
           </Link>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">
                 Order {order.id.substring(0, 8)}...
               </h1>
               <div className="flex items-center gap-3">
@@ -137,7 +137,7 @@ export default async function AdminOrderDetailPage(props: { params: Params }) {
           <div className="lg:col-span-2 space-y-6">
             {/* Customer info */}
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Customer Information</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Customer Information</h2>
               <div className="space-y-2">
                 <div>
                   <span className="text-sm text-gray-500">Name:</span>{' '}
@@ -162,7 +162,7 @@ export default async function AdminOrderDetailPage(props: { params: Params }) {
 
             {/* Order items */}
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Items</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Order Items</h2>
               <div className="space-y-4">
                 {orderItems.map((item) => {
                   const product = item.products as any;
@@ -213,7 +213,7 @@ export default async function AdminOrderDetailPage(props: { params: Params }) {
 
             {/* PO preview and download */}
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Purchase Order</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Purchase Order</h2>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -262,7 +262,7 @@ export default async function AdminOrderDetailPage(props: { params: Params }) {
 
             {/* Status history */}
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Status History</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Status History</h2>
               <div className="space-y-4">
                 {statusHistory.map((entry) => {
                   const changedBy = entry.profiles as any;
@@ -323,12 +323,12 @@ export default async function AdminOrderDetailPage(props: { params: Params }) {
             {/* Action controls */}
             {availableActions.length > 0 ? (
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
+                <h2 className="text-2xl font-semibold text-gray-900 mb-6">Actions</h2>
                 <OrderActions orderId={order.id} currentStatus={order.status} />
               </div>
             ) : (
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Status</h2>
+                <h2 className="text-2xl font-semibold text-gray-900 mb-6">Status</h2>
                 <p className="text-sm text-gray-600">
                   {order.status === 'needs_revision'
                     ? 'Awaiting resubmission from trade user.'

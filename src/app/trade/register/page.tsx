@@ -28,7 +28,7 @@ export default function TradeRegisterPage() {
 
   return (
     <div className="bg-white min-h-screen">
-      <div className="container mx-auto px-4 py-16 max-w-2xl">
+      <div className="container mx-auto px-4 py-12 max-w-2xl">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
           Trade Account Registration
         </h1>

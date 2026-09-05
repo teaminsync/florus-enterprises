@@ -24,7 +24,7 @@ export default async function TradeDashboardPage() {
 
   return (
     <div className="bg-white min-h-screen">
-      <div className="container mx-auto px-4 py-16 max-w-4xl">
+      <div className="container mx-auto px-4 py-12 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             Trade Dashboard
@@ -56,13 +56,13 @@ export default async function TradeDashboardPage() {
 
         <div className="space-y-4">
           <p className="text-gray-600">
-            Your trade account is active. Features like cart, checkout, and trade pricing will be available in the next checkpoint.
+            Your trade account is active. Use the navigation menu to browse products, manage your cart, and view orders.
           </p>
           
           <form action={logoutAction}>
             <button
               type="submit"
-              className="px-6 py-2 bg-gray-200 text-gray-700 font-medium rounded-md hover:bg-gray-300 transition-colors"
+              className="px-6 py-2 border border-gray-300 text-gray-700 font-medium rounded-md hover:bg-gray-50 transition-colors"
             >
               Sign Out
             </button>

@@ -14,7 +14,7 @@ export default function ContactPage() {
             </h2>
             
             {/* Placeholder contact details - marked clearly as placeholders */}
-            <div className="space-y-4 text-gray-600">
+            <div className="space-y-4 text-gray-700">
               <div>
                 <h3 className="font-medium text-gray-900 mb-1">Address</h3>
                 <p>

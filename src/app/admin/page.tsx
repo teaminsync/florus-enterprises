@@ -28,7 +28,7 @@ export default async function AdminDashboardPage() {
 
   return (
     <div className="bg-white min-h-screen">
-      <div className="container mx-auto px-4 py-16 max-w-6xl">
+      <div className="container mx-auto px-4 py-12 max-w-6xl">
         <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-4xl font-bold text-gray-900 mb-2">
@@ -41,7 +41,7 @@ export default async function AdminDashboardPage() {
           <form action={logoutAction}>
             <button
               type="submit"
-              className="px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-md hover:bg-gray-300 transition-colors"
+              className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-md hover:bg-gray-50 transition-colors"
             >
               Sign Out
             </button>
@@ -52,14 +52,14 @@ export default async function AdminDashboardPage() {
           {/* Pending Orders Card */}
           <Link
             href="/admin/orders?status=pending_verification"
-            className="bg-white border-2 border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all"
+            className="bg-white border border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all"
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">
                 Pending Orders
               </h2>
               {pendingOrders && pendingOrders > 0 && (
-                <span className="inline-flex items-center justify-center w-8 h-8 bg-yellow-100 text-yellow-600 text-sm font-bold rounded-full">
+                <span className="inline-flex items-center justify-center w-8 h-8 bg-yellow-100 text-yellow-700 text-sm font-bold rounded-full">
                   {pendingOrders}
                 </span>
               )}
@@ -72,14 +72,14 @@ export default async function AdminDashboardPage() {
           {/* Orders Needing Revision Card */}
           <Link
             href="/admin/orders?status=needs_revision"
-            className="bg-white border-2 border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all"
+            className="bg-white border border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all"
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">
                 Awaiting Resubmission
               </h2>
               {needsRevisionOrders && needsRevisionOrders > 0 && (
-                <span className="inline-flex items-center justify-center w-8 h-8 bg-orange-100 text-orange-600 text-sm font-bold rounded-full">
+                <span className="inline-flex items-center justify-center w-8 h-8 bg-orange-100 text-orange-700 text-sm font-bold rounded-full">
                   {needsRevisionOrders}
                 </span>
               )}
@@ -92,7 +92,7 @@ export default async function AdminDashboardPage() {
           {/* All Orders Card */}
           <Link
             href="/admin/orders"
-            className="bg-white border-2 border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all"
+            className="bg-white border border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all"
           >
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               All Orders
@@ -105,14 +105,14 @@ export default async function AdminDashboardPage() {
           {/* Pending Applications Card */}
           <Link
             href="/admin/applications"
-            className="bg-white border-2 border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all"
+            className="bg-white border border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all"
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">
                 Pending Applications
               </h2>
               {pendingApplications && pendingApplications > 0 && (
-                <span className="inline-flex items-center justify-center w-8 h-8 bg-red-100 text-red-600 text-sm font-bold rounded-full">
+                <span className="inline-flex items-center justify-center w-8 h-8 bg-red-100 text-red-700 text-sm font-bold rounded-full">
                   {pendingApplications}
                 </span>
               )}
@@ -124,7 +124,9 @@ export default async function AdminDashboardPage() {
         </div>
 
         <div className="bg-gray-50 rounded-lg p-6">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Logged in as</h3>
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Logged in as
+          </h3>
           <p className="text-gray-900">{user.email}</p>
         </div>
       </div>
