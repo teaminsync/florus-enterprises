@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireRole } from '@/utils/auth/require-role';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { ApproveButton } from './ApproveButton';
-import { rejectApplicationAction } from './actions';
+import { RejectButton } from './RejectButton';
 
 type Params = Promise<{ id: string }>;
 
@@ -151,16 +151,12 @@ export default async function ApplicationDetailPage(props: { params: Params }) {
               />
             </div>
 
-            <form action={rejectApplicationAction} className="flex-1">
-              <input type="hidden" name="applicationId" value={application.id} />
-              <input type="hidden" name="adminUserId" value={adminUser.id} />
-              <button
-                type="submit"
-                className="w-full px-6 py-3 bg-red-600 text-white font-medium rounded-md hover:bg-red-700 transition-colors"
-              >
-                Reject Application
-              </button>
-            </form>
+            <div className="flex-1">
+              <RejectButton 
+                applicationId={application.id}
+                adminUserId={adminUser.id}
+              />
+            </div>
           </div>
         )}
 

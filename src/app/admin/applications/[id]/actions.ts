@@ -1,6 +1,5 @@
 'use server';
 
-import { redirect } from 'next/navigation';
 import { createAdminClient } from '@/utils/supabase/admin';
 
 export async function approveApplicationAction(formData: FormData) {
@@ -8,7 +7,7 @@ export async function approveApplicationAction(formData: FormData) {
   const adminUserId = formData.get('adminUserId') as string;
 
   if (!applicationId || !adminUserId) {
-    redirect('/admin/applications?error=missing_data');
+    return { success: false, error: 'Missing application ID or admin user ID.' };
   }
 
   const adminClient = createAdminClient();
@@ -22,11 +21,11 @@ export async function approveApplicationAction(formData: FormData) {
       .single();
 
     if (fetchError || !application) {
-      redirect('/admin/applications?error=application_not_found');
+      return { success: false, error: 'Application not found.' };
     }
 
     if (application.status !== 'pending') {
-      redirect(`/admin/applications/${applicationId}?error=already_processed`);
+      return { success: false, error: 'Application has already been processed.' };
     }
 
     // 2. Generate invite link (not sending email - admin will relay manually)
@@ -101,9 +100,14 @@ export async function approveApplicationAction(formData: FormData) {
 export async function rejectApplicationAction(formData: FormData) {
   const applicationId = formData.get('applicationId') as string;
   const adminUserId = formData.get('adminUserId') as string;
+  const rejectionReason = formData.get('rejectionReason') as string;
 
   if (!applicationId || !adminUserId) {
-    redirect('/admin/applications?error=missing_data');
+    return { success: false, error: 'Missing application ID or admin user ID.' };
+  }
+
+  if (!rejectionReason || rejectionReason.trim() === '') {
+    return { success: false, error: 'Rejection reason is required.' };
   }
 
   const adminClient = createAdminClient();
@@ -117,18 +121,19 @@ export async function rejectApplicationAction(formData: FormData) {
       .single();
 
     if (fetchError || !application) {
-      redirect('/admin/applications?error=application_not_found');
+      return { success: false, error: 'Application not found.' };
     }
 
     if (application.status !== 'pending') {
-      redirect(`/admin/applications/${applicationId}?error=already_processed`);
+      return { success: false, error: 'Application has already been processed.' };
     }
 
-    // 2. Update application status to rejected
+    // 2. Update application status to rejected with reason
     const { error: updateError } = await adminClient
       .from('trade_applications')
       .update({
         status: 'rejected',
+        rejection_reason: rejectionReason.trim(),
         reviewed_by: adminUserId,
         reviewed_at: new Date().toISOString(),
       })
@@ -136,13 +141,13 @@ export async function rejectApplicationAction(formData: FormData) {
 
     if (updateError) {
       console.error('Failed to update application:', updateError);
-      redirect(`/admin/applications/${applicationId}?error=update_failed`);
+      return { success: false, error: 'Failed to update application status.' };
     }
 
-    // Success - redirect to applications list
-    redirect('/admin/applications?success=rejected');
+    // Success
+    return { success: true };
   } catch (error) {
     console.error('Unexpected error during rejection:', error);
-    redirect(`/admin/applications/${applicationId}?error=unexpected`);
+    return { success: false, error: 'An unexpected error occurred.' };
   }
 }
