@@ -3,6 +3,13 @@
 import { requireRole } from '@/utils/auth/require-role';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { canAdminTransition } from '@/utils/orders/transitions';
+import { sendEmail } from '@/utils/email/send';
+import {
+  orderApprovedEmail,
+  orderRejectedEmail,
+  orderNeedsRevisionEmail,
+  orderFulfilledEmail,
+} from '@/utils/email/templates';
 
 interface ActionResult {
   success: boolean;
@@ -20,7 +27,7 @@ export async function approveOrderAction(orderId: string): Promise<ActionResult>
     // Re-fetch current order status
     const { data: order, error: fetchError } = await adminClient
       .from('orders')
-      .select('id, status')
+      .select('id, status, user_id')
       .eq('id', orderId)
       .single();
 
@@ -61,6 +68,25 @@ export async function approveOrderAction(orderId: string): Promise<ActionResult>
       // Non-fatal - order was updated successfully
     }
 
+    // Send approval email
+    const { data: userAuth } = await adminClient.auth.admin.getUserById(order.user_id);
+    const { data: userProfile } = await adminClient
+      .from('profiles')
+      .select('full_name')
+      .eq('id', order.user_id)
+      .single();
+
+    if (userAuth?.user?.email && userProfile) {
+      const approvalEmailTemplate = orderApprovedEmail(userProfile.full_name, orderId);
+      await sendEmail({
+        to: userAuth.user.email,
+        subject: approvalEmailTemplate.subject,
+        html: approvalEmailTemplate.html,
+      }).catch((err) => {
+        console.error('Failed to send order approval email:', err);
+      });
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Approve order error:', error);
@@ -86,7 +112,7 @@ export async function rejectOrderAction(
     // Re-fetch current order status
     const { data: order, error: fetchError } = await adminClient
       .from('orders')
-      .select('id, status')
+      .select('id, status, user_id')
       .eq('id', orderId)
       .single();
 
@@ -131,6 +157,29 @@ export async function rejectOrderAction(
       // Non-fatal - order was updated successfully
     }
 
+    // Send rejection email
+    const { data: userAuth } = await adminClient.auth.admin.getUserById(order.user_id);
+    const { data: userProfile } = await adminClient
+      .from('profiles')
+      .select('full_name')
+      .eq('id', order.user_id)
+      .single();
+
+    if (userAuth?.user?.email && userProfile) {
+      const rejectionEmailTemplate = orderRejectedEmail(
+        userProfile.full_name,
+        orderId,
+        feedback
+      );
+      await sendEmail({
+        to: userAuth.user.email,
+        subject: rejectionEmailTemplate.subject,
+        html: rejectionEmailTemplate.html,
+      }).catch((err) => {
+        console.error('Failed to send order rejection email:', err);
+      });
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Reject order error:', error);
@@ -156,7 +205,7 @@ export async function markNeedsRevisionAction(
     // Re-fetch current order status
     const { data: order, error: fetchError } = await adminClient
       .from('orders')
-      .select('id, status')
+      .select('id, status, user_id')
       .eq('id', orderId)
       .single();
 
@@ -201,6 +250,29 @@ export async function markNeedsRevisionAction(
       // Non-fatal - order was updated successfully
     }
 
+    // Send needs revision email
+    const { data: userAuth } = await adminClient.auth.admin.getUserById(order.user_id);
+    const { data: userProfile } = await adminClient
+      .from('profiles')
+      .select('full_name')
+      .eq('id', order.user_id)
+      .single();
+
+    if (userAuth?.user?.email && userProfile) {
+      const revisionEmailTemplate = orderNeedsRevisionEmail(
+        userProfile.full_name,
+        orderId,
+        feedback
+      );
+      await sendEmail({
+        to: userAuth.user.email,
+        subject: revisionEmailTemplate.subject,
+        html: revisionEmailTemplate.html,
+      }).catch((err) => {
+        console.error('Failed to send needs revision email:', err);
+      });
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Mark needs revision error:', error);
@@ -219,7 +291,7 @@ export async function markFulfilledAction(orderId: string): Promise<ActionResult
     // Re-fetch current order status
     const { data: order, error: fetchError } = await adminClient
       .from('orders')
-      .select('id, status')
+      .select('id, status, user_id')
       .eq('id', orderId)
       .single();
 
@@ -258,6 +330,25 @@ export async function markFulfilledAction(orderId: string): Promise<ActionResult
     if (historyError) {
       console.error('Failed to insert status history:', historyError);
       // Non-fatal - order was updated successfully
+    }
+
+    // Send fulfillment email
+    const { data: userAuth } = await adminClient.auth.admin.getUserById(order.user_id);
+    const { data: userProfile } = await adminClient
+      .from('profiles')
+      .select('full_name')
+      .eq('id', order.user_id)
+      .single();
+
+    if (userAuth?.user?.email && userProfile) {
+      const fulfilledEmailTemplate = orderFulfilledEmail(userProfile.full_name, orderId);
+      await sendEmail({
+        to: userAuth.user.email,
+        subject: fulfilledEmailTemplate.subject,
+        html: fulfilledEmailTemplate.html,
+      }).catch((err) => {
+        console.error('Failed to send order fulfilled email:', err);
+      });
     }
 
     return { success: true };

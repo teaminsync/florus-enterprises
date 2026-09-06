@@ -1,6 +1,8 @@
 'use server';
 
 import { createAdminClient } from '@/utils/supabase/admin';
+import { sendEmail } from '@/utils/email/send';
+import { tradeApplicationApprovedEmail, tradeApplicationRejectedEmail } from '@/utils/email/templates';
 
 export async function approveApplicationAction(formData: FormData) {
   const applicationId = formData.get('applicationId') as string;
@@ -86,6 +88,17 @@ export async function approveApplicationAction(formData: FormData) {
       return { success: false, error: 'Failed to update application status.' };
     }
 
+    // Send approval email with invite link
+    const approvalEmailTemplate = tradeApplicationApprovedEmail(application.full_name, inviteUrl);
+    await sendEmail({
+      to: application.email,
+      subject: approvalEmailTemplate.subject,
+      html: approvalEmailTemplate.html,
+    }).catch((err) => {
+      console.error('Failed to send approval email:', err);
+      // Don't fail the action if email fails
+    });
+
     // Success - return the invite URL for display
     return {
       success: true,
@@ -116,7 +129,7 @@ export async function rejectApplicationAction(formData: FormData) {
     // 1. Get application to verify status
     const { data: application, error: fetchError } = await adminClient
       .from('trade_applications')
-      .select('status')
+      .select('status, email, full_name')
       .eq('id', applicationId)
       .single();
 
@@ -143,6 +156,20 @@ export async function rejectApplicationAction(formData: FormData) {
       console.error('Failed to update application:', updateError);
       return { success: false, error: 'Failed to update application status.' };
     }
+
+    // Send rejection email with reason
+    const rejectionEmailTemplate = tradeApplicationRejectedEmail(
+      application.full_name,
+      rejectionReason.trim()
+    );
+    await sendEmail({
+      to: application.email,
+      subject: rejectionEmailTemplate.subject,
+      html: rejectionEmailTemplate.html,
+    }).catch((err) => {
+      console.error('Failed to send rejection email:', err);
+      // Don't fail the action if email fails
+    });
 
     // Success
     return { success: true };

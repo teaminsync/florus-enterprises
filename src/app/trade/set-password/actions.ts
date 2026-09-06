@@ -2,6 +2,9 @@
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
+import { sendEmail } from '@/utils/email/send';
+import { tradeAccountActivatedEmail } from '@/utils/email/templates';
 
 export async function setPasswordAction(formData: FormData) {
   const password = formData.get('password') as string;
@@ -36,6 +39,26 @@ export async function setPasswordAction(formData: FormData) {
       success: false,
       error: 'Failed to set password. Please try again.',
     };
+  }
+
+  // Send account activated email
+  const adminClient = createAdminClient();
+  const { data: profile } = await adminClient
+    .from('profiles')
+    .select('full_name')
+    .eq('id', user.id)
+    .single();
+
+  if (profile && user.email) {
+    const activationEmailTemplate = tradeAccountActivatedEmail(profile.full_name);
+    await sendEmail({
+      to: user.email,
+      subject: activationEmailTemplate.subject,
+      html: activationEmailTemplate.html,
+    }).catch((err) => {
+      console.error('Failed to send account activation email:', err);
+      // Don't fail the action if email fails
+    });
   }
 
   // Redirect to dashboard

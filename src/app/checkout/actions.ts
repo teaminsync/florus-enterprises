@@ -4,6 +4,9 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { calculateTradePrice, calculateGstAmount } from '@/utils/pricing';
+import { sendEmail } from '@/utils/email/send';
+import { orderSubmittedCustomerEmail, orderSubmittedAdminEmail } from '@/utils/email/templates';
+import { ADMIN_EMAILS } from '@/utils/email/admin-recipients';
 
 export async function submitOrderAction(formData: FormData) {
   const userId = formData.get('userId') as string;
@@ -194,6 +197,45 @@ export async function submitOrderAction(formData: FormData) {
     if (clearCartError) {
       console.error('Failed to clear cart:', clearCartError);
       // Non-fatal - order created successfully, cart just not cleared
+    }
+
+    // 10. Send confirmation emails
+    // Fetch user info for emails
+    const { data: userAuth } = await adminClient.auth.admin.getUserById(user.id);
+    const { data: userProfile } = await adminClient
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .single();
+
+    if (userAuth?.user?.email && userProfile && orderId) {
+      // Send to customer
+      const customerEmailTemplate = orderSubmittedCustomerEmail(
+        userProfile.full_name,
+        orderId,
+        totalInclGst
+      );
+      await sendEmail({
+        to: userAuth.user.email,
+        subject: customerEmailTemplate.subject,
+        html: customerEmailTemplate.html,
+      }).catch((err) => {
+        console.error('Failed to send customer order confirmation:', err);
+      });
+
+      // Send to admins
+      const adminEmailTemplate = orderSubmittedAdminEmail(
+        userProfile.full_name,
+        orderId,
+        totalInclGst
+      );
+      await sendEmail({
+        to: ADMIN_EMAILS,
+        subject: adminEmailTemplate.subject,
+        html: adminEmailTemplate.html,
+      }).catch((err) => {
+        console.error('Failed to send admin order notification:', err);
+      });
     }
 
     return {

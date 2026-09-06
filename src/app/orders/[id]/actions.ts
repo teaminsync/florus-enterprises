@@ -3,6 +3,9 @@
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { canTradeUserResubmit } from '@/utils/orders/transitions';
+import { sendEmail } from '@/utils/email/send';
+import { orderResubmittedCustomerEmail, orderResubmittedAdminEmail } from '@/utils/email/templates';
+import { ADMIN_EMAILS } from '@/utils/email/admin-recipients';
 
 interface ActionResult {
   success: boolean;
@@ -118,6 +121,39 @@ export async function resubmitOrderAction(formData: FormData): Promise<ActionRes
     if (historyError) {
       console.error('Failed to insert status history:', historyError);
       // Non-fatal - order was updated successfully
+    }
+
+    // Send resubmission emails
+    const { data: userAuth } = await adminClient.auth.admin.getUserById(user.id);
+    const { data: userProfile } = await adminClient
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .single();
+
+    if (userAuth?.user?.email && userProfile) {
+      // Send to customer
+      const customerEmailTemplate = orderResubmittedCustomerEmail(
+        userProfile.full_name,
+        orderId
+      );
+      await sendEmail({
+        to: userAuth.user.email,
+        subject: customerEmailTemplate.subject,
+        html: customerEmailTemplate.html,
+      }).catch((err) => {
+        console.error('Failed to send customer resubmission confirmation:', err);
+      });
+
+      // Send to admins
+      const adminEmailTemplate = orderResubmittedAdminEmail(userProfile.full_name, orderId);
+      await sendEmail({
+        to: ADMIN_EMAILS,
+        subject: adminEmailTemplate.subject,
+        html: adminEmailTemplate.html,
+      }).catch((err) => {
+        console.error('Failed to send admin resubmission notification:', err);
+      });
     }
 
     return { success: true };
