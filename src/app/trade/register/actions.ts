@@ -50,6 +50,22 @@ export async function submitTradeApplication(formData: FormData) {
     // Use admin client to insert into trade_applications
     const adminClient = createAdminClient();
 
+    // Check if email already has an auth.users account
+    const { data: emailExists, error: checkError } = await adminClient
+      .rpc('check_auth_email_exists', { check_email: email });
+
+    if (checkError) {
+      console.error('Failed to check existing email:', checkError);
+      // Log the error but proceed - the approval-time check still exists as a backstop
+    }
+
+    if (emailExists) {
+      return {
+        success: false,
+        error: 'An account with this email already exists. If you believe this is a mistake, please contact us at team@florus.in.',
+      };
+    }
+
     const { data: application, error } = await adminClient
       .from('trade_applications')
       .insert({
