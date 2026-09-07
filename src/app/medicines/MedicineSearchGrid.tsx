@@ -17,15 +17,11 @@ interface DisplayProduct {
 interface MedicineSearchGridProps {
   products: DisplayProduct[];
   initialQuery: string;
-  hasActiveCategory: boolean;
-  clearCategoryHref: string; // href that clears category but nothing else
 }
 
 export function MedicineSearchGrid({
   products,
   initialQuery,
-  hasActiveCategory,
-  clearCategoryHref,
 }: MedicineSearchGridProps) {
   const [query, setQuery] = useState(initialQuery);
 
@@ -42,43 +38,28 @@ export function MedicineSearchGrid({
 
   return (
     <div>
+      {/* Search Input with Inline Clear */}
       <div className="mb-8">
-        <div className="max-w-2xl">
+        <div className="max-w-2xl relative">
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by product name or composition..."
-            className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#009EE0] focus:border-transparent outline-none"
+            className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#009EE0] focus:border-transparent outline-none"
           />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xl"
+              type="button"
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          )}
         </div>
       </div>
-
-      {(hasActiveCategory || query.trim()) && (
-        <div className="mb-6 flex items-center gap-3 flex-wrap">
-          <span className="text-sm text-gray-600">Active filters:</span>
-          {hasActiveCategory && (
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full text-sm">
-              <span>Category filter active</span>
-              <Link href={clearCategoryHref} className="text-gray-500 hover:text-gray-700">
-                ×
-              </Link>
-            </div>
-          )}
-          {query.trim() && (
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full text-sm">
-              <span>Search: &quot;{query}&quot;</span>
-              <button
-                onClick={() => setQuery('')}
-                className="text-gray-500 hover:text-gray-700"
-                type="button"
-              >
-                ×
-              </button>
-            </div>
-          )}
-        </div>
-      )}
 
       <p className="text-sm text-gray-600 mb-6">
         {filtered.length} product{filtered.length !== 1 ? 's' : ''} found

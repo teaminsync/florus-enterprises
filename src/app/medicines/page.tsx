@@ -22,6 +22,12 @@ export default async function MedicinesPage(props: {
   const sessionUser = await getSessionUser();
   const isTradeUser = sessionUser?.role === 'trade';
 
+  // Fetch all categories for the filter pills
+  const { data: categories } = await supabase
+    .from('categories')
+    .select('id, slug, name')
+    .order('display_order');
+
   // Build the query - include sp and gst_percent for trade pricing
   let query = supabase
     .from('products')
@@ -59,17 +65,6 @@ export default async function MedicinesPage(props: {
 
   const { data: products } = await query;
 
-  // Get the active category for display
-  let activeCategory = null;
-  if (categorySlug) {
-    const { data } = await supabase
-      .from('categories')
-      .select('name, slug')
-      .eq('slug', categorySlug)
-      .single();
-    activeCategory = data;
-  }
-
   // Map products to DisplayProduct format for client component
   const displayProducts = (products || []).map((product) => {
     let priceLabel = '';
@@ -105,9 +100,6 @@ export default async function MedicinesPage(props: {
     };
   });
 
-  // Determine clear category href
-  const clearCategoryHref = searchQuery ? `/medicines?q=${searchQuery}` : '/medicines';
-
   return (
     <div className="bg-white min-h-screen">
       <div className="container mx-auto px-4 py-12">
@@ -115,13 +107,45 @@ export default async function MedicinesPage(props: {
           <h1 className="text-4xl font-bold text-gray-900 mb-6">
             Medicines Catalog
           </h1>
+
+          {/* Category Filter Pills */}
+          <div className="flex flex-wrap gap-2 mb-6">
+            <Link
+              href={searchQuery ? `/medicines?q=${searchQuery}` : '/medicines'}
+              className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                !categorySlug
+                  ? 'bg-[#009EE0] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              All
+            </Link>
+            {categories?.map((cat) => {
+              const href = searchQuery
+                ? `/medicines?category=${cat.slug}&q=${searchQuery}`
+                : `/medicines?category=${cat.slug}`;
+              const isActive = categorySlug === cat.slug;
+              
+              return (
+                <Link
+                  key={cat.id}
+                  href={href}
+                  className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                    isActive
+                      ? 'bg-[#009EE0] text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {cat.name}
+                </Link>
+              );
+            })}
+          </div>
         </div>
 
         <MedicineSearchGrid
           products={displayProducts}
           initialQuery={searchQuery}
-          hasActiveCategory={!!activeCategory}
-          clearCategoryHref={clearCategoryHref}
         />
       </div>
     </div>
