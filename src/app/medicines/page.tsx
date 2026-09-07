@@ -69,19 +69,25 @@ export default async function MedicinesPage(props: {
   const displayProducts = (products || []).map((product) => {
     let priceLabel = '';
     let priceSubLabel: string | null = null;
+    let rawPrice: number | null = null;
 
     if (isTradeUser) {
       if (product.sp !== null) {
-        priceLabel = `₹${calculateTradePrice(product.sp).toFixed(2)}`;
+        const tradePrice = calculateTradePrice(product.sp);
+        priceLabel = `₹${tradePrice.toFixed(2)}`;
         priceSubLabel = '(ex-GST)';
+        rawPrice = tradePrice;
       } else {
         priceLabel = 'Pricing coming soon';
+        rawPrice = null;
       }
     } else {
       if (product.mrp) {
         priceLabel = `₹${product.mrp.toFixed(2)}`;
+        rawPrice = product.mrp;
       } else {
         priceLabel = 'Price not available';
+        rawPrice = null;
       }
     }
 
@@ -97,6 +103,7 @@ export default async function MedicinesPage(props: {
           : null,
       priceLabel,
       priceSubLabel,
+      rawPrice,
     };
   });
 
