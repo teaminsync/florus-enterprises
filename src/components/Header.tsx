@@ -31,8 +31,12 @@ export async function Header() {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="text-xl font-semibold text-gray-900 hover:text-gray-700">
-            Florus Enterprises
+          <Link href="/" className="flex items-center">
+            <img 
+              src="/florus-logo-rect.svg" 
+              alt="Florus Enterprises" 
+              className="h-10 w-auto"
+            />
           </Link>
 
           {/* Navigation */}
