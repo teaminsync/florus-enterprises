@@ -41,8 +41,19 @@ export async function setPasswordAction(formData: FormData) {
     };
   }
 
-  // Send account activated email
+  // Mark password as set in the profile
   const adminClient = createAdminClient();
+  const { error: profileUpdateError } = await adminClient
+    .from('profiles')
+    .update({ password_set: true })
+    .eq('id', user.id);
+
+  if (profileUpdateError) {
+    console.error('Failed to update password_set flag:', profileUpdateError);
+    // Don't fail the action - password is already set, this is just a tracking flag
+  }
+
+  // Send account activated email
   const { data: profile } = await adminClient
     .from('profiles')
     .select('full_name')

@@ -3,11 +3,16 @@ import { getSessionUser } from '@/utils/auth/get-session-user';
 import { SetPasswordForm } from './SetPasswordForm';
 
 export default async function SetPasswordPage() {
-  // Redirect authenticated users away
+  // Check session and password_set status
   const sessionUser = await getSessionUser();
-  if (sessionUser) {
+  
+  // If session exists AND password already set, redirect away (already fully onboarded)
+  if (sessionUser && sessionUser.passwordSet) {
     redirect(sessionUser.role === 'admin' ? '/admin' : '/trade/dashboard');
   }
+
+  // If session exists but password NOT set, show form (legitimate invite flow)
+  // If no session at all, show form (will show error in SetPasswordForm via action)
 
   return (
     <div className="bg-white min-h-screen">

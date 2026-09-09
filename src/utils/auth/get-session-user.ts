@@ -19,7 +19,7 @@ export async function getSessionUser() {
   // Fetch the profile to get the role
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, role, account_type, full_name')
+    .select('id, role, account_type, full_name, password_set')
     .eq('id', user.id)
     .single();
 
@@ -33,5 +33,6 @@ export async function getSessionUser() {
     role: profile.role as 'admin' | 'trade',
     accountType: profile.account_type as 'doctor' | 'pharmacy' | 'retailer' | 'hospital' | null,
     fullName: profile.full_name,
+    passwordSet: profile.password_set,
   };
 }

@@ -53,6 +53,7 @@ export async function approveApplicationAction(formData: FormData) {
         full_name: application.full_name,
         phone: application.phone,
         is_active: true,
+        password_set: false, // Explicitly mark as not yet activated
       });
 
     if (profileError) {
