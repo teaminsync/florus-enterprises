@@ -300,3 +300,19 @@ export function orderFulfilledEmail(fullName: string, orderId: string): { subjec
     html: getEmailWrapper(bodyHtml),
   };
 }
+
+// 14. Contact Form Submitted - Visitor Confirmation
+export function contactFormSubmittedEmail(fullName: string): { subject: string; html: string } {
+  const bodyHtml = `
+    <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Message Received</h2>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Thank you for reaching out to Florus Enterprises. We've received your message and our team will get back to you soon.</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">We typically respond within 1-2 business days.</p>
+    <p style="margin: 24px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">Best regards,<br>The Florus Team</p>
+  `;
+
+  return {
+    subject: 'Thank You for Contacting Us - Florus Enterprises',
+    html: getEmailWrapper(bodyHtml),
+  };
+}
