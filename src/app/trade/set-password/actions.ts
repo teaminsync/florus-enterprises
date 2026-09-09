@@ -24,7 +24,7 @@ export async function setPasswordAction(formData: FormData) {
   if (!user) {
     return {
       success: false,
-      error: 'You must be logged in to set a password',
+      error: 'This link may have expired or already been used. If you received an invitation email from Florus Enterprises, please use the link in that email to set your password. If you\'re having trouble, contact us at team@florus.in.',
     };
   }
 
