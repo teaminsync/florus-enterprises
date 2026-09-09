@@ -316,3 +316,19 @@ export function contactFormSubmittedEmail(fullName: string): { subject: string; 
     html: getEmailWrapper(bodyHtml),
   };
 }
+
+// 15. Password Reset Requested
+export function passwordResetRequestedEmail(resetUrl: string): { subject: string; html: string } {
+  const bodyHtml = `
+    <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Reset Your Password</h2>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">We received a request to reset your password for your Florus Enterprises account.</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Click the button below to set a new password:</p>
+    ${getButton('Reset Password', resetUrl)}
+    <p style="margin: 24px 0 0 0; color: #999999; font-size: 14px; line-height: 1.6;"><em>This link is valid for a limited time. If you didn't request this password reset, you can safely ignore this email.</em></p>
+  `;
+
+  return {
+    subject: 'Reset Your Password - Florus Enterprises',
+    html: getEmailWrapper(bodyHtml),
+  };
+}

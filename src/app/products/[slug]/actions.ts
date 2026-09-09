@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
+import { requireTradeAccountReady } from '@/utils/auth/require-trade-account-ready';
 
 export async function addToCartAction(formData: FormData) {
   const productId = formData.get('productId') as string;
@@ -11,27 +12,13 @@ export async function addToCartAction(formData: FormData) {
     return { success: false, error: 'Invalid product or quantity' };
   }
 
+  // Check trade account is authenticated and password is set
+  const authCheck = await requireTradeAccountReady();
+  if (!authCheck.success) {
+    return authCheck;
+  }
+
   const supabase = await createClient();
-
-  // 1. Verify user is authenticated and has trade role
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { success: false, error: 'You must be logged in to add items to cart' };
-  }
-
-  // Check user has trade role
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (!profile || profile.role !== 'trade') {
-    return { success: false, error: 'Only trade accounts can add items to cart' };
-  }
 
   // 2. Verify product exists and has a price
   const { data: product } = await supabase
@@ -53,7 +40,7 @@ export async function addToCartAction(formData: FormData) {
     .from('cart_items')
     .upsert(
       {
-        user_id: user.id,
+        user_id: authCheck.userId,
         product_id: productId,
         quantity: quantity,
         updated_at: new Date().toISOString(),

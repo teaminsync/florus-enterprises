@@ -69,6 +69,11 @@ export function LoginForm() {
 
       <div className="mt-6 text-center">
         <p className="text-sm text-gray-600">
+          <Link href="/trade/forgot-password" className="text-[#009EE0] hover:underline">
+            Forgot your password?
+          </Link>
+        </p>
+        <p className="text-sm text-gray-600 mt-3">
           Don't have an account?{' '}
           <Link href="/trade/register" className="text-[#009EE0] hover:underline">
             Apply for trade access

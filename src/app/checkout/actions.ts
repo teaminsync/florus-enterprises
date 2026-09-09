@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { calculateTradePrice, calculateGstAmount } from '@/utils/pricing';
+import { requireTradeAccountReady } from '@/utils/auth/require-trade-account-ready';
 import { sendEmail } from '@/utils/email/send';
 import { orderSubmittedCustomerEmail, orderSubmittedAdminEmail } from '@/utils/email/templates';
 import { ADMIN_EMAILS } from '@/utils/email/admin-recipients';
@@ -16,27 +17,18 @@ export async function submitOrderAction(formData: FormData) {
     return { success: false, error: 'Missing required data' };
   }
 
-  const supabase = await createClient();
-  const adminClient = createAdminClient();
+  // Check trade account is authenticated and password is set
+  const authCheck = await requireTradeAccountReady();
+  if (!authCheck.success) {
+    return authCheck;
+  }
 
-  // 1. Verify user is authenticated and has trade role
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user || user.id !== userId) {
+  if (authCheck.userId !== userId) {
     return { success: false, error: 'Authentication error' };
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (!profile || profile.role !== 'trade') {
-    return { success: false, error: 'Only trade accounts can place orders' };
-  }
+  const supabase = await createClient();
+  const adminClient = createAdminClient();
 
   // 2. Re-fetch cart items with current product prices
   const { data: cartItems, error: cartError } = await adminClient
@@ -53,7 +45,7 @@ export async function submitOrderAction(formData: FormData) {
         is_active
       )
     `)
-    .eq('user_id', user.id);
+    .eq('user_id', userId);
 
   if (cartError || !cartItems || cartItems.length === 0) {
     return { success: false, error: 'Your cart is empty' };
@@ -111,7 +103,7 @@ export async function submitOrderAction(formData: FormData) {
   // 5. Upload PO file to storage
   const timestamp = Date.now();
   const fileExtension = poFile.name.split('.').pop();
-  const storagePath = `${user.id}/${timestamp}-${poFile.name}`;
+  const storagePath = `${userId}/${timestamp}-${poFile.name}`;
 
   const { error: uploadError } = await supabase.storage
     .from('po-uploads')
@@ -132,7 +124,7 @@ export async function submitOrderAction(formData: FormData) {
     const { data: order, error: orderError } = await adminClient
       .from('orders')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         status: 'pending_verification',
         po_storage_path: storagePath,
         po_original_filename: poFile.name,
@@ -180,7 +172,7 @@ export async function submitOrderAction(formData: FormData) {
         order_id: orderId,
         status: 'pending_verification',
         note: 'Order submitted',
-        changed_by: user.id,
+        changed_by: userId,
       });
 
     if (historyError) {
@@ -192,7 +184,7 @@ export async function submitOrderAction(formData: FormData) {
     const { error: clearCartError } = await adminClient
       .from('cart_items')
       .delete()
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     if (clearCartError) {
       console.error('Failed to clear cart:', clearCartError);
@@ -201,11 +193,11 @@ export async function submitOrderAction(formData: FormData) {
 
     // 10. Send confirmation emails
     // Fetch user info for emails
-    const { data: userAuth } = await adminClient.auth.admin.getUserById(user.id);
+    const { data: userAuth } = await adminClient.auth.admin.getUserById(userId);
     const { data: userProfile } = await adminClient
       .from('profiles')
       .select('full_name')
-      .eq('id', user.id)
+      .eq('id', userId)
       .single();
 
     if (userAuth?.user?.email && userProfile && orderId) {

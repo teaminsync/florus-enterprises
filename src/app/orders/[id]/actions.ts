@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { canTradeUserResubmit } from '@/utils/orders/transitions';
+import { requireTradeAccountReady } from '@/utils/auth/require-trade-account-ready';
 import { sendEmail } from '@/utils/email/send';
 import { orderResubmittedCustomerEmail, orderResubmittedAdminEmail } from '@/utils/email/templates';
 import { ADMIN_EMAILS } from '@/utils/email/admin-recipients';
@@ -17,15 +18,14 @@ interface ActionResult {
  */
 export async function resubmitOrderAction(formData: FormData): Promise<ActionResult> {
   try {
-    // Get authenticated user session
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: 'Authentication required' };
+    // Check trade account is authenticated and password is set
+    const authCheck = await requireTradeAccountReady();
+    if (!authCheck.success) {
+      return authCheck;
     }
+
+    const userId = authCheck.userId;
+    const supabase = await createClient();
 
     // Get orderId and new PO file from form data
     const orderId = formData.get('orderId') as string;
@@ -60,7 +60,7 @@ export async function resubmitOrderAction(formData: FormData): Promise<ActionRes
     }
 
     // Verify ownership
-    if (order.user_id !== user.id) {
+    if (order.user_id !== userId) {
       return { success: false, error: 'You do not have permission to modify this order' };
     }
 
@@ -75,7 +75,7 @@ export async function resubmitOrderAction(formData: FormData): Promise<ActionRes
     // Upload new PO file to storage
     const timestamp = Date.now();
     const fileExtension = poFile.name.split('.').pop();
-    const storagePath = `${user.id}/${timestamp}-${poFile.name}`;
+    const storagePath = `${userId}/${timestamp}-${poFile.name}`;
 
     const { error: uploadError } = await supabase.storage
       .from('po-uploads')
@@ -115,7 +115,7 @@ export async function resubmitOrderAction(formData: FormData): Promise<ActionRes
         order_id: orderId,
         status: 'pending_verification',
         note: 'PO resubmitted after revision request',
-        changed_by: user.id,
+        changed_by: userId,
       });
 
     if (historyError) {
@@ -124,11 +124,11 @@ export async function resubmitOrderAction(formData: FormData): Promise<ActionRes
     }
 
     // Send resubmission emails
-    const { data: userAuth } = await adminClient.auth.admin.getUserById(user.id);
+    const { data: userAuth } = await adminClient.auth.admin.getUserById(userId);
     const { data: userProfile } = await adminClient
       .from('profiles')
       .select('full_name')
-      .eq('id', user.id)
+      .eq('id', userId)
       .single();
 
     if (userAuth?.user?.email && userProfile) {
