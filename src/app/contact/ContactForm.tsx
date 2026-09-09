@@ -18,18 +18,18 @@ export function ContactForm() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = e.currentTarget; // capture synchronously, before any await
     setError(null);
     setSuccess(false);
     setIsSubmitting(true);
 
     try {
-      const formData = new FormData(e.currentTarget);
+      const formData = new FormData(form); // use captured reference
       const result = await submitContactForm(formData);
 
       if (result.success) {
         setSuccess(true);
-        // Clear the form
-        e.currentTarget.reset();
+        form.reset(); // use captured reference, not e.currentTarget
       } else {
         setError(result.error || 'Failed to submit your message. Please try again.');
       }
