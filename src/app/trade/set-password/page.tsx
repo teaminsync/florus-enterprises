@@ -14,7 +14,7 @@ export default async function SetPasswordPage() {
 
   // Case 3: No session at all, redirect to error with specific message
   if (!sessionUser) {
-    redirect('/auth/error?reason=expired_link');
+    redirect('/auth/error');
   }
 
   // Case 2: Session exists but password NOT set, show form (legitimate invite/recovery flow)

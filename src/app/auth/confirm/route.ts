@@ -16,5 +16,5 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.redirect(new URL('/auth/error?reason=expired_link', request.url))
+  return NextResponse.redirect(new URL('/auth/error', request.url))
 }
