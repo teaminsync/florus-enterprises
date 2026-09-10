@@ -15,11 +15,14 @@ export default async function Home() {
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-16 md:py-24">
         <div className="max-w-4xl">
+          <p className="text-sm font-semibold text-[#009EE0] uppercase tracking-wide mb-4">
+            Trusted Healthcare Distribution Since 2015
+          </p>
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-6">
-            Your Trusted Partner in Pharmaceutical Distribution
+            Reliable Pharmaceutical & Medical Device Distribution for Maharashtra's Healthcare Providers
           </h1>
           <p className="text-lg md:text-xl text-gray-600 leading-relaxed">
-            Florus Enterprises is a leading medicine stockist and dealership, committed to delivering quality pharmaceutical products to healthcare professionals, institutions, and retailers across the region. With an extensive catalog spanning multiple therapeutic categories, we ensure reliable supply and competitive pricing for your practice or business.
+            For over a decade, Florus Enterprises has supplied hospitals, pharmacies, clinics, and retailers across Mumbai, Thane, Kalyan, Sindhudurg, and beyond with pharmaceuticals, medical devices, and surgical products. We're a fully licensed wholesale distributor — not a retail pharmacy — built for institutional buyers who need dependable supply, transparent pricing, and a partner who understands healthcare distribution.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-4">
             <Link
@@ -38,8 +41,51 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Browse by Category */}
+      {/* Why Choose Florus */}
       <section className="bg-gray-50 py-16">
+        <div className="container mx-auto px-4">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-6">
+            Why Choose Florus
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Proven Track Record
+              </h3>
+              <p className="text-gray-600">
+                Supplying leading hospitals including Nair and Rajawadi, alongside trade chemists, for close to a decade.
+              </p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Diverse Portfolio
+              </h3>
+              <p className="text-gray-600">
+                A broad range spanning pharmaceuticals, medical devices, surgical products, and specialised formulations.
+              </p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Compliance You Can Trust
+              </h3>
+              <p className="text-gray-600">
+                Strong compliance standards backed by valid Drug Licences and GST registration.
+              </p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:border-[#009EE0] hover:shadow-md transition-all">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Customer-First Service
+              </h3>
+              <p className="text-gray-600">
+                Timely delivery and transparent, case-by-case pricing built around your business.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Browse by Category */}
+      <section className="bg-white py-16">
         <div className="container mx-auto px-4">
           <h2 className="text-2xl font-semibold text-gray-900 mb-6">
             Browse by Category

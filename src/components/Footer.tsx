@@ -9,7 +9,7 @@ export function Footer() {
             className="h-12 w-auto mx-auto"
           />
           <p className="text-sm text-gray-600">
-            Trusted wholesale and trade distribution of pharmaceutical products
+            Trusted Healthcare Distribution Since 2015
           </p>
           <p className="text-xs text-gray-500 mt-4">
             © {new Date().getFullYear()} Florus Enterprises. All rights reserved.

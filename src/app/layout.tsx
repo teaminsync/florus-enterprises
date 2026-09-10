@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Florus Enterprises - Pharmaceutical Wholesale & Distribution",
-  description: "Trusted medicine stockist and dealership offering quality pharmaceutical products for healthcare professionals and institutions.",
+  title: "Florus Enterprises | Pharmaceutical & Medical Device Distributor in Maharashtra",
+  description: "Florus Enterprises is a trusted wholesale distributor of pharmaceuticals, medical devices, and surgical products, serving hospitals, pharmacies, and healthcare providers across Mumbai, Thane, Kalyan, Sindhudurg, and Maharashtra since 2015.",
   icons: {
     icon: [
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },

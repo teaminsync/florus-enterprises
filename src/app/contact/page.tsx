@@ -15,38 +15,37 @@ export default function ContactPage() {
               Get in Touch
             </h2>
             
-            {/* Placeholder contact details - marked clearly as placeholders */}
             <div className="space-y-4 text-gray-700">
               <div>
                 <h3 className="font-medium text-gray-900 mb-1">Address</h3>
                 <p>
-                  {/* PLACEHOLDER */}
-                  123 Medical District, Pharmaceutical Hub<br />
-                  Mumbai, Maharashtra 400001<br />
-                  India
+                  B-Wing/08, Ground Floor, S.R. CHS Ltd.,<br />
+                  Virat Nagar, Chanakya Chawk,<br />
+                  Virar (W), Palghar – 401303<br />
+                  Maharashtra
                 </p>
               </div>
 
               <div>
                 <h3 className="font-medium text-gray-900 mb-1">Phone</h3>
                 <p>
-                  {/* PLACEHOLDER */}
-                  +91 22 1234 5678
+                  9082246490 / 9320561612<br />
+                  <span className="text-sm">(also on WhatsApp)</span>
                 </p>
               </div>
 
               <div>
                 <h3 className="font-medium text-gray-900 mb-1">Email</h3>
                 <p>
-                  {/* PLACEHOLDER */}
-                  info@florusenterprises.com
+                  florusenterprises@gmail.com
                 </p>
               </div>
 
               <div className="pt-4">
                 <h3 className="font-medium text-gray-900 mb-1">Business Hours</h3>
                 <p>
-                  Monday - Saturday: 9:00 AM - 6:00 PM<br />
+                  Monday–Friday: 10:00 AM–7:00 PM<br />
+                  Saturday: 10:00 AM–5:00 PM<br />
                   Sunday: Closed
                 </p>
               </div>
