@@ -12,7 +12,11 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const { error } = await supabase.auth.verifyOtp({ type, token_hash })
     if (!error) {
-      return NextResponse.redirect(new URL(next, request.url))
+      const redirectUrl = new URL(next, request.url)
+      if (type === 'recovery') {
+        redirectUrl.searchParams.set('flow', 'recovery')
+      }
+      return NextResponse.redirect(redirectUrl)
     }
   }
 
