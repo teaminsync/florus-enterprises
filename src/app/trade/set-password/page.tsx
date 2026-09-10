@@ -7,13 +7,17 @@ export default async function SetPasswordPage() {
   // Check session and password_set status
   const sessionUser = await getSessionUser();
   
-  // If session exists AND password already set, redirect to correct home
+  // Case 1: Session exists AND password already set, redirect to correct home
   if (sessionUser && sessionUser.passwordSet) {
     redirect(getAuthHomeRoute({ role: sessionUser.role, password_set: sessionUser.passwordSet }));
   }
 
-  // If session exists but password NOT set, show form (legitimate invite flow)
-  // If no session at all, show form (will show error in SetPasswordForm via action)
+  // Case 3: No session at all, redirect to error with specific message
+  if (!sessionUser) {
+    redirect('/auth/error?reason=expired_link');
+  }
+
+  // Case 2: Session exists but password NOT set, show form (legitimate invite/recovery flow)
 
   return (
     <div className="bg-white min-h-screen">
