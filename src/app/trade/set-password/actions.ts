@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { sendEmail } from '@/utils/email/send';
-import { tradeAccountActivatedEmail } from '@/utils/email/templates';
+import { tradeAccountActivatedEmail, passwordChangedConfirmationEmail } from '@/utils/email/templates';
 
 export async function setPasswordAction(formData: FormData) {
   const password = formData.get('password') as string;
@@ -41,8 +41,17 @@ export async function setPasswordAction(formData: FormData) {
     };
   }
 
-  // Mark password as set in the profile
+  // Fetch profile BEFORE updating password_set flag to determine if this is first-time activation or reset
   const adminClient = createAdminClient();
+  const { data: profile } = await adminClient
+    .from('profiles')
+    .select('full_name, password_set')
+    .eq('id', user.id)
+    .single();
+
+  const wasAlreadyActive = profile?.password_set === true;
+
+  // Mark password as set in the profile
   const { error: profileUpdateError } = await adminClient
     .from('profiles')
     .update({ password_set: true })
@@ -53,21 +62,18 @@ export async function setPasswordAction(formData: FormData) {
     // Don't fail the action - password is already set, this is just a tracking flag
   }
 
-  // Send account activated email
-  const { data: profile } = await adminClient
-    .from('profiles')
-    .select('full_name')
-    .eq('id', user.id)
-    .single();
-
+  // Send appropriate email based on whether this is first-time activation or password reset
   if (profile && user.email) {
-    const activationEmailTemplate = tradeAccountActivatedEmail(profile.full_name);
+    const emailTemplate = wasAlreadyActive
+      ? passwordChangedConfirmationEmail(profile.full_name)
+      : tradeAccountActivatedEmail(profile.full_name);
+    
     await sendEmail({
       to: user.email,
-      subject: activationEmailTemplate.subject,
-      html: activationEmailTemplate.html,
+      subject: emailTemplate.subject,
+      html: emailTemplate.html,
     }).catch((err) => {
-      console.error('Failed to send account activation email:', err);
+      console.error('Failed to send email:', err);
       // Don't fail the action if email fails
     });
   }

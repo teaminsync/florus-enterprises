@@ -332,3 +332,20 @@ export function passwordResetRequestedEmail(resetUrl: string): { subject: string
     html: getEmailWrapper(bodyHtml),
   };
 }
+
+// 16. Password Changed Confirmation
+export function passwordChangedConfirmationEmail(fullName: string): { subject: string; html: string } {
+  const bodyHtml = `
+    <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Password Changed</h2>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Your Florus Enterprises account password was just changed.</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">If you made this change, no action is needed.</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;"><strong>If you did NOT make this change, please contact us immediately at team@florus.in.</strong></p>
+    <p style="margin: 24px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">Best regards,<br>The Florus Team</p>
+  `;
+
+  return {
+    subject: 'Your Password Was Changed - Florus Enterprises',
+    html: getEmailWrapper(bodyHtml),
+  };
+}
