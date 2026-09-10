@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/utils/auth/get-session-user';
+import { getAuthHomeRoute } from '@/utils/auth/get-auth-home-route';
 import { LoginForm } from './LoginForm';
 
 export default async function LoginPage() {
-  // Redirect authenticated users away
+  // Redirect authenticated users to their correct home
   const sessionUser = await getSessionUser();
   if (sessionUser) {
-    redirect(sessionUser.role === 'admin' ? '/admin' : '/trade/dashboard');
+    redirect(getAuthHomeRoute({ role: sessionUser.role, password_set: sessionUser.passwordSet }));
   }
 
   return (

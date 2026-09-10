@@ -23,9 +23,9 @@ export default async function MedicinesPage(props: {
 
   const supabase = await createClient();
   
-  // Check if user is logged in as trade
+  // Check if user is logged in as trade AND has completed onboarding
   const sessionUser = await getSessionUser();
-  const isTradeUser = sessionUser?.role === 'trade';
+  const isTradeUser = sessionUser?.role === 'trade' && sessionUser?.passwordSet === true;
 
   // Fetch all categories for the filter pills
   const { data: categories } = await supabase

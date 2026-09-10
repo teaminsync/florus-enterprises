@@ -1,14 +1,15 @@
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/utils/auth/get-session-user';
+import { getAuthHomeRoute } from '@/utils/auth/get-auth-home-route';
 import { SetPasswordForm } from './SetPasswordForm';
 
 export default async function SetPasswordPage() {
   // Check session and password_set status
   const sessionUser = await getSessionUser();
   
-  // If session exists AND password already set, redirect away (already fully onboarded)
+  // If session exists AND password already set, redirect to correct home
   if (sessionUser && sessionUser.passwordSet) {
-    redirect(sessionUser.role === 'admin' ? '/admin' : '/trade/dashboard');
+    redirect(getAuthHomeRoute({ role: sessionUser.role, password_set: sessionUser.passwordSet }));
   }
 
   // If session exists but password NOT set, show form (legitimate invite flow)

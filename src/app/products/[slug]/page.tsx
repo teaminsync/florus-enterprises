@@ -11,9 +11,9 @@ export default async function ProductPage(props: { params: Params }) {
   const params = await props.params;
   const supabase = await createClient();
   
-  // Check if user is logged in as trade
+  // Check if user is logged in as trade AND has completed onboarding
   const sessionUser = await getSessionUser();
-  const isTradeUser = sessionUser?.role === 'trade';
+  const isTradeUser = sessionUser?.role === 'trade' && sessionUser?.passwordSet === true;
 
   // Fetch the product with category details - include sp and gst_percent for trade pricing
   const { data: product, error } = await supabase

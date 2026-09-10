@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
+import { getAuthHomeRoute } from './get-auth-home-route';
 
 export async function requireRole(role: 'admin' | 'trade') {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect(role === 'admin' ? '/trade/login' : '/trade/login');
+    redirect('/trade/login');
   }
 
   const { data: profile } = await supabase
@@ -15,8 +16,13 @@ export async function requireRole(role: 'admin' | 'trade') {
     .eq('id', user.id)
     .single();
 
-  if (!profile || profile.role !== role) {
+  if (!profile) {
     redirect('/trade/login');
+  }
+
+  // Role mismatch: redirect to where this session actually belongs
+  if (profile.role !== role) {
+    redirect(getAuthHomeRoute(profile));
   }
 
   // For trade accounts, also require password to be set (completed onboarding)
