@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
 
 export type ApplicationDetails = {
   full_name: string;
@@ -19,11 +19,14 @@ export type ApplicationDetails = {
 /**
  * Fetch the approved trade application details for a given user ID.
  * Returns null if no matching approved application is found.
+ * 
+ * Uses admin client because trade_applications has no RLS/grants for regular clients.
+ * This is safe: function is always called with userId from a verified session.
  */
 export async function getMyApplicationDetails(userId: string): Promise<ApplicationDetails | null> {
-  const supabase = await createClient();
+  const adminClient = createAdminClient();
 
-  const { data, error } = await supabase
+  const { data, error } = await adminClient
     .from('trade_applications')
     .select('full_name, phone, email, address, city, state, pincode, applicant_type, business_or_clinic_name, registration_number, licence_number, gst_number, authorized_signatory')
     .eq('linked_profile_id', userId)
