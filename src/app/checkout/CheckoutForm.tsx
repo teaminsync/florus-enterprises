@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitOrderAction } from './actions';
 
@@ -20,8 +20,25 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 export function CheckoutForm({ userId }: CheckoutFormProps) {
   const router = useRouter();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Clean up object URL when file changes or component unmounts
+  useEffect(() => {
+    if (selectedFile) {
+      const url = URL.createObjectURL(selectedFile);
+      setPreviewUrl(url);
+      
+      // Cleanup function
+      return () => {
+        URL.revokeObjectURL(url);
+        setPreviewUrl(null);
+      };
+    } else {
+      setPreviewUrl(null);
+    }
+  }, [selectedFile]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -118,6 +135,16 @@ export function CheckoutForm({ userId }: CheckoutFormProps) {
             <strong>Selected file:</strong> {selectedFile.name} (
             {(selectedFile.size / 1024).toFixed(1)} KB)
           </p>
+          {previewUrl && (
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block mt-2 text-sm text-[#009EE0] hover:underline font-medium"
+            >
+              Preview →
+            </a>
+          )}
         </div>
       )}
 

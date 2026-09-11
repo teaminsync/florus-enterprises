@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { requireRole } from '@/utils/auth/require-role';
 import { createClient } from '@/utils/supabase/server';
 import { calculateTradePrice, calculateGstAmount } from '@/utils/pricing';
+import { getMyApplicationDetails } from '@/utils/trade/get-my-application-details';
 import { CheckoutForm } from './CheckoutForm';
 
 export default async function CheckoutPage() {
@@ -9,6 +10,9 @@ export default async function CheckoutPage() {
   const { user } = await requireRole('trade');
 
   const supabase = await createClient();
+
+  // Get delivery address from application details
+  const applicationDetails = await getMyApplicationDetails(user.id);
 
   // Fetch cart items with product details
   const { data: cartItems } = await supabase
@@ -140,6 +144,27 @@ export default async function CheckoutPage() {
             </div>
 
             {/* PO Upload Form */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-3">
+                Delivery Address
+              </h2>
+              {applicationDetails ? (
+                <>
+                  <div className="text-sm text-gray-900 mb-3">
+                    <p>{applicationDetails.address}</p>
+                    <p>{applicationDetails.city}, {applicationDetails.state} {applicationDetails.pincode}</p>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Your order will be delivered to this address.
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-600">
+                  Unable to load delivery address. Please contact us at team@florus.in for assistance.
+                </p>
+              )}
+            </div>
+
             <div className="bg-white border border-gray-200 rounded-lg p-6">
               <h2 className="text-2xl font-semibold text-gray-900 mb-3">
                 Purchase Order

@@ -116,6 +116,20 @@ export default async function ApplicationDetailPage(props: { params: Params }) {
                 </div>
               )}
 
+              {application.gst_number && (
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 mb-1">GST No.</dt>
+                  <dd className="text-base text-gray-900">{application.gst_number}</dd>
+                </div>
+              )}
+
+              {application.authorized_signatory && (
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 mb-1">Authorized Signatory</dt>
+                  <dd className="text-base text-gray-900">{application.authorized_signatory}</dd>
+                </div>
+              )}
+
               <div className="md:col-span-2">
                 <dt className="text-sm font-medium text-gray-500 mb-1">Address</dt>
                 <dd className="text-base text-gray-900">

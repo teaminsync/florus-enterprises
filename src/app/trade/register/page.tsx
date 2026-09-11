@@ -94,13 +94,14 @@ export default function TradeRegisterPage() {
               </div>
               <div>
                 <label htmlFor="business_or_clinic_name" className="block text-sm font-medium text-gray-900 mb-2">
-                  Clinic Name
+                  Hospital/Clinic Name *
                 </label>
                 <input
                   type="text"
                   id="business_or_clinic_name"
                   name="business_or_clinic_name"
                   className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#009EE0] focus:border-transparent outline-none"
+                  required
                 />
               </div>
             </>
@@ -110,7 +111,7 @@ export default function TradeRegisterPage() {
             <>
               <div>
                 <label htmlFor="business_or_clinic_name" className="block text-sm font-medium text-gray-900 mb-2">
-                  Business Name *
+                  Firm/Business Name *
                 </label>
                 <input
                   type="text"
@@ -122,7 +123,7 @@ export default function TradeRegisterPage() {
               </div>
               <div>
                 <label htmlFor="licence_number" className="block text-sm font-medium text-gray-900 mb-2">
-                  Licence Number *
+                  Drug Licence Number *
                 </label>
                 <input
                   type="text"
@@ -132,22 +133,72 @@ export default function TradeRegisterPage() {
                   required
                 />
               </div>
+              <div>
+                <label htmlFor="gst_number" className="block text-sm font-medium text-gray-900 mb-2">
+                  GST No. *
+                </label>
+                <input
+                  type="text"
+                  id="gst_number"
+                  name="gst_number"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#009EE0] focus:border-transparent outline-none"
+                  required
+                />
+              </div>
             </>
           )}
 
           {applicantType === 'hospital' && (
-            <div>
-              <label htmlFor="business_or_clinic_name" className="block text-sm font-medium text-gray-900 mb-2">
-                Institution Name *
-              </label>
-              <input
-                type="text"
-                id="business_or_clinic_name"
-                name="business_or_clinic_name"
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#009EE0] focus:border-transparent outline-none"
-                required
-              />
-            </div>
+            <>
+              <div>
+                <label htmlFor="business_or_clinic_name" className="block text-sm font-medium text-gray-900 mb-2">
+                  Institution/Hospital Name *
+                </label>
+                <input
+                  type="text"
+                  id="business_or_clinic_name"
+                  name="business_or_clinic_name"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#009EE0] focus:border-transparent outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="registration_number" className="block text-sm font-medium text-gray-900 mb-2">
+                  Hospital Registration Number *
+                </label>
+                <input
+                  type="text"
+                  id="registration_number"
+                  name="registration_number"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#009EE0] focus:border-transparent outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="gst_number" className="block text-sm font-medium text-gray-900 mb-2">
+                  GST No. *
+                </label>
+                <input
+                  type="text"
+                  id="gst_number"
+                  name="gst_number"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#009EE0] focus:border-transparent outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="authorized_signatory" className="block text-sm font-medium text-gray-900 mb-2">
+                  Authorized Signatory *
+                </label>
+                <input
+                  type="text"
+                  id="authorized_signatory"
+                  name="authorized_signatory"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#009EE0] focus:border-transparent outline-none"
+                  required
+                />
+              </div>
+            </>
           )}
 
           {/* Phone */}

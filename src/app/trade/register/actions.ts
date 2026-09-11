@@ -16,6 +16,13 @@ export async function submitTradeApplication(formData: FormData) {
   const state = formData.get('state') as string;
   const pincode = formData.get('pincode') as string;
 
+  // Optional fields based on type
+  const businessOrClinicName = formData.get('business_or_clinic_name') as string | null;
+  const registrationNumber = formData.get('registration_number') as string | null;
+  const licenceNumber = formData.get('licence_number') as string | null;
+  const gstNumber = formData.get('gst_number') as string | null;
+  const authorizedSignatory = formData.get('authorized_signatory') as string | null;
+
   // Validate required fields
   if (!applicantType || !fullName || !phone || !email || !address || !city || !state || !pincode) {
     return {
@@ -32,6 +39,30 @@ export async function submitTradeApplication(formData: FormData) {
     };
   }
 
+  // Type-specific field validation per the field matrix
+  if (applicantType === 'doctor') {
+    if (!registrationNumber || !businessOrClinicName) {
+      return {
+        success: false,
+        error: 'Medical Registration Number and Hospital/Clinic Name are required for doctors',
+      };
+    }
+  } else if (applicantType === 'pharmacy' || applicantType === 'retailer') {
+    if (!businessOrClinicName || !licenceNumber || !gstNumber) {
+      return {
+        success: false,
+        error: 'Firm/Business Name, Drug Licence Number, and GST No. are required',
+      };
+    }
+  } else if (applicantType === 'hospital') {
+    if (!businessOrClinicName || !registrationNumber || !gstNumber || !authorizedSignatory) {
+      return {
+        success: false,
+        error: 'Institution/Hospital Name, Hospital Registration Number, GST No., and Authorized Signatory are required for hospitals',
+      };
+    }
+  }
+
   // Validate email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
@@ -40,11 +71,6 @@ export async function submitTradeApplication(formData: FormData) {
       error: 'Invalid email address',
     };
   }
-
-  // Optional fields based on type
-  const businessOrClinicName = formData.get('business_or_clinic_name') as string | null;
-  const registrationNumber = formData.get('registration_number') as string | null;
-  const licenceNumber = formData.get('licence_number') as string | null;
 
   try {
     // Use admin client to insert into trade_applications
@@ -74,6 +100,8 @@ export async function submitTradeApplication(formData: FormData) {
         business_or_clinic_name: businessOrClinicName,
         registration_number: registrationNumber,
         licence_number: licenceNumber,
+        gst_number: gstNumber,
+        authorized_signatory: authorizedSignatory,
         address,
         city,
         state,
