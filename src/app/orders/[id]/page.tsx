@@ -40,6 +40,10 @@ export default async function OrderDetailPage(props: { params: Params }) {
       subtotal_ex_gst,
       gst_amount,
       total_incl_gst,
+      payment_method,
+      razorpay_order_id,
+      razorpay_payment_id,
+      payment_status,
       created_at,
       updated_at
     `)
@@ -289,6 +293,32 @@ export default async function OrderDetailPage(props: { params: Params }) {
                   <dt className="text-gray-500">Status</dt>
                   <dd className="text-gray-900">{statusLabel}</dd>
                 </div>
+                <div>
+                  <dt className="text-gray-500">Payment Method</dt>
+                  <dd className="text-gray-900">
+                    {order.payment_method === 'online' ? 'Online Payment' : 'Cash on Delivery'}
+                  </dd>
+                </div>
+                {order.payment_method === 'online' && (
+                  <>
+                    {order.payment_status && (
+                      <div>
+                        <dt className="text-gray-500">Payment Status</dt>
+                        <dd className="text-gray-900 capitalize">
+                          {order.payment_status.replace(/_/g, ' ')}
+                        </dd>
+                      </div>
+                    )}
+                    {order.razorpay_payment_id && (
+                      <div>
+                        <dt className="text-gray-500">Payment ID</dt>
+                        <dd className="text-gray-900 font-mono text-xs break-all">
+                          {order.razorpay_payment_id}
+                        </dd>
+                      </div>
+                    )}
+                  </>
+                )}
                 <div>
                   <dt className="text-gray-500">Created</dt>
                   <dd className="text-gray-900">

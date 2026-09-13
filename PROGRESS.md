@@ -226,3 +226,61 @@ it actually *look* premium and consistent, not just pass a lint/build
 check) was done by the project owner directly in a browser, not asserted
 by the coding agent — this checkpoint's evidence bar is necessarily
 different from the data-driven checkpoints before it.
+
+
+---
+
+## Checkpoint 26 — Razorpay Online Payment Integration
+**Completed:** September 13, 2026
+
+Online payment via Razorpay added to checkout flow alongside existing COD.
+PO upload remains required for BOTH payment methods (confirmed business
+requirement). Migration `20260913205408_add_payment_fields.sql` applied:
+added `payment_method` (cod/online), `razorpay_order_id`,
+`razorpay_payment_id`, `payment_status` (captured/refund_*),
+`razorpay_refund_id` to `orders` table.
+
+**Server-side security pattern established**: cart total calculation
+extracted into shared helper (`src/utils/orders/calculate-cart-total.ts`)
+— single source of truth for amounts used in both Razorpay order creation
+AND signature verification, eliminating any drift risk. Amount NEVER
+trusted from client.
+
+Flow implemented:
+1. `createRazorpayOrderAction`: creates Razorpay Order server-side using
+   calculated cart total (amount in paise), returns order_id + key_id for
+   client
+2. CheckoutForm: payment method radio (COD/Online, no default), PO upload
+   required for both; if Online → load Razorpay checkout.js → open modal
+   → on payment success, submit order with razorpay_payment_id +
+   razorpay_signature
+3. `submitOrderAction` extended: if payment_method=online, verify
+   signature (HMAC-SHA256 of `order_id|payment_id` using
+   RAZORPAY_KEY_SECRET) BEFORE order creation; reject immediately if
+   invalid (logged loudly); if valid, create order with payment fields
+   set (payment_status='captured')
+4. Payment info displayed on `/orders/[id]` (user view) and
+   `/admin/orders/[id]` (admin view): method, status, payment IDs
+
+**Known edge case NOT handled in this checkpoint** (documented for
+Checkpoint 27's webhook handler): if signature verification fails OR
+order insert fails AFTER Razorpay has captured real money, payment is
+orphaned with no corresponding order in this system. Checkpoint 27 will
+add webhook-based reconciliation for this.
+
+Files created/modified:
+- `src/utils/razorpay/client.ts` (NEW - instantiates SDK, throws if env
+  vars missing)
+- `supabase/migrations/20260913205408_add_payment_fields.sql` (NEW -
+  applied successfully)
+- `src/utils/orders/calculate-cart-total.ts` (NEW - shared cart
+  calculation helper)
+- `src/app/checkout/actions.ts` (added createRazorpayOrderAction,
+  extended submitOrderAction with signature verification)
+- `src/app/checkout/CheckoutForm.tsx` (payment method selection,
+  Razorpay modal integration)
+- `src/app/orders/[id]/page.tsx` (display payment info)
+- `src/app/admin/orders/[id]/page.tsx` (display payment info in admin
+  view)
+
+Build clean. Ready for Razorpay test-mode verification.

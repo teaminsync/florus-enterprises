@@ -160,6 +160,47 @@ export default async function AdminOrderDetailPage(props: { params: Params }) {
               </div>
             </div>
 
+            {/* Payment info */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Payment Information</h2>
+              <div className="space-y-2">
+                <div>
+                  <span className="text-sm text-gray-500">Payment Method:</span>{' '}
+                  <span className="text-sm font-medium text-gray-900">
+                    {order.payment_method === 'online' ? 'Online Payment' : 'Cash on Delivery'}
+                  </span>
+                </div>
+                {order.payment_method === 'online' && (
+                  <>
+                    {order.payment_status && (
+                      <div>
+                        <span className="text-sm text-gray-500">Payment Status:</span>{' '}
+                        <span className="text-sm font-medium text-gray-900 capitalize">
+                          {order.payment_status.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                    )}
+                    {order.razorpay_order_id && (
+                      <div>
+                        <span className="text-sm text-gray-500">Razorpay Order ID:</span>{' '}
+                        <span className="text-xs font-mono text-gray-900 break-all">
+                          {order.razorpay_order_id}
+                        </span>
+                      </div>
+                    )}
+                    {order.razorpay_payment_id && (
+                      <div>
+                        <span className="text-sm text-gray-500">Razorpay Payment ID:</span>{' '}
+                        <span className="text-xs font-mono text-gray-900 break-all">
+                          {order.razorpay_payment_id}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
             {/* Order items */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-2xl font-semibold text-gray-900 mb-6">Order Items</h2>

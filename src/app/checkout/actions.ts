@@ -12,6 +12,10 @@ import { ADMIN_EMAILS } from '@/utils/email/admin-recipients';
 export async function submitOrderAction(formData: FormData) {
   const userId = formData.get('userId') as string;
   const poFile = formData.get('poFile') as File;
+  const paymentMethod = (formData.get('paymentMethod') as string) || 'cod';
+  const razorpayOrderId = formData.get('razorpayOrderId') as string | null;
+  const razorpayPaymentId = formData.get('razorpayPaymentId') as string | null;
+  const razorpaySignature = formData.get('razorpaySignature') as string | null;
 
   if (!userId || !poFile) {
     return { success: false, error: 'Missing required data' };
@@ -27,78 +31,47 @@ export async function submitOrderAction(formData: FormData) {
     return { success: false, error: 'Authentication error' };
   }
 
-  const supabase = await createClient();
-  const adminClient = createAdminClient();
+  // If online payment, verify signature BEFORE proceeding
+  if (paymentMethod === 'online') {
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      return { success: false, error: 'Missing payment verification data' };
+    }
 
-  // 2. Re-fetch cart items with current product prices
-  const { data: cartItems, error: cartError } = await adminClient
-    .from('cart_items')
-    .select(`
-      id,
-      quantity,
-      product_id,
-      products (
-        id,
-        name,
-        sp,
-        gst_percent,
-        is_active
-      )
-    `)
-    .eq('user_id', userId);
+    // Verify Razorpay signature
+    const crypto = await import('crypto');
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+      .digest('hex');
 
-  if (cartError || !cartItems || cartItems.length === 0) {
-    return { success: false, error: 'Your cart is empty' };
-  }
-
-  // 3. Validate all products have pricing and are active
-  const invalidItems: string[] = [];
-  
-  for (const item of cartItems) {
-    const product = item.products as any;
-    
-    if (!product || !product.is_active) {
-      invalidItems.push('Inactive product in cart');
-    } else if (product.sp === null) {
-      invalidItems.push(`${product.name} does not have pricing available`);
+    if (expectedSignature !== razorpaySignature) {
+      console.error('SECURITY: Razorpay signature verification failed', {
+        razorpayOrderId,
+        razorpayPaymentId,
+        userId,
+      });
+      return {
+        success: false,
+        error: 'Payment verification failed. Please contact support immediately.',
+      };
     }
   }
 
-  if (invalidItems.length > 0) {
-    return {
-      success: false,
-      error: `Cannot proceed: ${invalidItems.join(', ')}. Please remove these items from your cart.`,
-    };
+  const supabase = await createClient();
+  const adminClient = createAdminClient();
+
+  // Import the shared cart calculation helper
+  const { calculateCartTotal } = await import('@/utils/orders/calculate-cart-total');
+
+  // Calculate cart total server-side (NEVER trust client amounts)
+  const cartResult = await calculateCartTotal(userId);
+  
+  if (!cartResult.success) {
+    return { success: false, error: cartResult.error };
   }
 
-  // 4. Calculate order totals from current prices
-  let subtotalExGst = 0;
-  let totalGstAmount = 0; // Accumulate GST from each line
-  const orderItems: Array<{
-    product_id: string;
-    quantity: number;
-    unit_price_ex_gst_snapshot: number;
-  }> = [];
-
-  for (const item of cartItems) {
-    const product = item.products as any;
-    const unitPriceExGst = calculateTradePrice(product.sp);
-    const lineSubtotalExGst = Math.round(unitPriceExGst * item.quantity * 100) / 100;
-    const lineGst = calculateGstAmount(lineSubtotalExGst, product.gst_percent);
-
-    subtotalExGst += lineSubtotalExGst;
-    totalGstAmount += lineGst; // Accumulate each line's GST
-
-    orderItems.push({
-      product_id: item.product_id,
-      quantity: item.quantity,
-      unit_price_ex_gst_snapshot: unitPriceExGst,
-    });
-  }
-
-  // Round total GST to 2 decimal places
-  const gstAmount = Math.round(totalGstAmount * 100) / 100;
-  const totalInclGst = subtotalExGst + gstAmount;
+  const { totals, cartItems } = cartResult;
+  const { subtotalExGst, gstAmount, totalInclGst, orderItems } = totals;
 
   // 5. Upload PO file to storage
   const timestamp = Date.now();
@@ -121,17 +94,27 @@ export async function submitOrderAction(formData: FormData) {
 
   try {
     // 6. Create order record
+    const orderData: any = {
+      user_id: userId,
+      status: 'pending_verification',
+      po_storage_path: storagePath,
+      po_original_filename: poFile.name,
+      subtotal_ex_gst: subtotalExGst,
+      gst_amount: gstAmount,
+      total_incl_gst: totalInclGst,
+      payment_method: paymentMethod,
+    };
+
+    // Add Razorpay fields if online payment
+    if (paymentMethod === 'online') {
+      orderData.razorpay_order_id = razorpayOrderId;
+      orderData.razorpay_payment_id = razorpayPaymentId;
+      orderData.payment_status = 'captured';
+    }
+
     const { data: order, error: orderError } = await adminClient
       .from('orders')
-      .insert({
-        user_id: userId,
-        status: 'pending_verification',
-        po_storage_path: storagePath,
-        po_original_filename: poFile.name,
-        subtotal_ex_gst: subtotalExGst,
-        gst_amount: gstAmount,
-        total_incl_gst: totalInclGst,
-      })
+      .insert(orderData)
       .select('id')
       .single();
 
@@ -239,6 +222,62 @@ export async function submitOrderAction(formData: FormData) {
     return {
       success: false,
       error: 'An unexpected error occurred. Please contact support if the issue persists.',
+    };
+  }
+}
+
+/**
+ * Create a Razorpay Order for online payment.
+ * Returns the razorpay_order_id, amount in paise, and key_id for client-side checkout.
+ */
+export async function createRazorpayOrderAction() {
+  // Check trade account is authenticated and password is set
+  const authCheck = await requireTradeAccountReady();
+  if (!authCheck.success) {
+    return authCheck;
+  }
+
+  const userId = authCheck.userId;
+
+  // Import here to avoid circular dependency issues
+  const { calculateCartTotal } = await import('@/utils/orders/calculate-cart-total');
+
+  // Calculate cart total server-side (NEVER trust client amounts)
+  const cartResult = await calculateCartTotal(userId);
+  
+  if (!cartResult.success) {
+    return { success: false, error: cartResult.error };
+  }
+
+  const { totals } = cartResult;
+
+  try {
+    // Import Razorpay client
+    const { razorpayClient } = await import('@/utils/razorpay/client');
+
+    // Create Razorpay Order (amount must be in paise)
+    const amountInPaise = Math.round(totals.totalInclGst * 100);
+    
+    const razorpayOrder = await razorpayClient.orders.create({
+      amount: amountInPaise,
+      currency: 'INR',
+      notes: {
+        userId,
+      },
+    });
+
+    // Return order details for client-side Razorpay checkout
+    return {
+      success: true,
+      razorpayOrderId: razorpayOrder.id,
+      amountInPaise,
+      keyId: process.env.RAZORPAY_KEY_ID!,
+    };
+  } catch (error) {
+    console.error('Failed to create Razorpay order:', error);
+    return {
+      success: false,
+      error: 'Failed to initiate payment. Please try again or contact support.',
     };
   }
 }
