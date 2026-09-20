@@ -96,6 +96,7 @@ export async function approveOrderAction(orderId: string): Promise<ActionResult>
 
 /**
  * Reject an order (pending_verification → rejected)
+ * If the order was paid online and payment is captured, automatically initiates a refund.
  */
 export async function rejectOrderAction(
   orderId: string,
@@ -109,10 +110,10 @@ export async function rejectOrderAction(
       return { success: false, error: 'Rejection reason is required' };
     }
 
-    // Re-fetch current order status
+    // Re-fetch current order status with payment fields
     const { data: order, error: fetchError } = await adminClient
       .from('orders')
-      .select('id, status, user_id')
+      .select('id, status, user_id, payment_method, payment_status, razorpay_payment_id, total_incl_gst')
       .eq('id', orderId)
       .single();
 
@@ -155,6 +156,63 @@ export async function rejectOrderAction(
     if (historyError) {
       console.error('Failed to insert status history:', historyError);
       // Non-fatal - order was updated successfully
+    }
+
+    // AUTOMATIC REFUND: if order was paid online and payment is captured
+    if (order.payment_method === 'online' && order.payment_status === 'captured' && order.razorpay_payment_id) {
+      try {
+        // Import Razorpay client
+        const { razorpayClient } = await import('@/utils/razorpay/client');
+        const { refundFailedAlertEmail } = await import('@/utils/email/templates');
+
+        // Initiate full refund (amount in paise)
+        const refund = await razorpayClient.payments.refund(order.razorpay_payment_id, {
+          amount: Math.round(order.total_incl_gst * 100),
+        });
+
+        // Update order with refund details
+        await adminClient
+          .from('orders')
+          .update({
+            payment_status: 'refund_initiated',
+            razorpay_refund_id: refund.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', orderId);
+
+        console.log('Refund initiated for rejected order:', {
+          orderId,
+          refundId: refund.id,
+          paymentId: order.razorpay_payment_id,
+        });
+
+      } catch (refundError) {
+        // CRITICAL: Refund failed but rejection still stands
+        console.error('CRITICAL: Refund failed for order', orderId, refundError);
+
+        // Update payment status to refund_failed
+        await adminClient
+          .from('orders')
+          .update({
+            payment_status: 'refund_failed',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', orderId);
+
+        // Send URGENT admin alert (DISTINCT from normal rejection email)
+        const { refundFailedAlertEmail: alertTemplate } = await import('@/utils/email/templates');
+        const alert = alertTemplate(orderId, order.razorpay_payment_id);
+        
+        await sendEmail({
+          to: process.env.ADMIN_EMAILS?.split(',') || [],
+          subject: alert.subject,
+          html: alert.html,
+        }).catch((err) => {
+          console.error('Failed to send refund failed alert:', err);
+        });
+
+        // Do NOT return error - order rejection succeeded, only refund failed
+      }
     }
 
     // Send rejection email
