@@ -4,11 +4,13 @@ import { requireRole } from '@/utils/auth/require-role';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { canAdminTransition } from '@/utils/orders/transitions';
 import { sendEmail } from '@/utils/email/send';
+import { ADMIN_EMAILS } from '@/utils/email/admin-recipients';
 import {
   orderApprovedEmail,
   orderRejectedEmail,
   orderNeedsRevisionEmail,
   orderFulfilledEmail,
+  refundFailedAlertEmail,
 } from '@/utils/email/templates';
 
 interface ActionResult {
@@ -163,7 +165,6 @@ export async function rejectOrderAction(
       try {
         // Import Razorpay client
         const { razorpayClient } = await import('@/utils/razorpay/client');
-        const { refundFailedAlertEmail } = await import('@/utils/email/templates');
 
         // Initiate full refund (amount in paise)
         const refund = await razorpayClient.payments.refund(order.razorpay_payment_id, {
@@ -200,11 +201,10 @@ export async function rejectOrderAction(
           .eq('id', orderId);
 
         // Send URGENT admin alert (DISTINCT from normal rejection email)
-        const { refundFailedAlertEmail: alertTemplate } = await import('@/utils/email/templates');
-        const alert = alertTemplate(orderId, order.razorpay_payment_id);
+        const alert = refundFailedAlertEmail(orderId, order.razorpay_payment_id);
         
         await sendEmail({
-          to: process.env.ADMIN_EMAILS?.split(',') || [],
+          to: ADMIN_EMAILS,
           subject: alert.subject,
           html: alert.html,
         }).catch((err) => {

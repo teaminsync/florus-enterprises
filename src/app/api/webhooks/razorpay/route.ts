@@ -3,6 +3,7 @@ import { validateWebhookSignature } from 'razorpay/dist/utils/razorpay-utils';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { sendEmail } from '@/utils/email/send';
 import { orphanedPaymentAlertEmail, refundFailedAlertEmail } from '@/utils/email/templates';
+import { ADMIN_EMAILS } from '@/utils/email/admin-recipients';
 
 /**
  * Razorpay Webhook Handler
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
           // Send urgent admin alert (non-blocking)
           const alertTemplate = orphanedPaymentAlertEmail(paymentId, amountInPaise);
           sendEmail({
-            to: process.env.ADMIN_EMAILS?.split(',') || [],
+            to: ADMIN_EMAILS,
             subject: alertTemplate.subject,
             html: alertTemplate.html,
           }).catch((err) => {
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
           // Send urgent admin alert (non-blocking)
           const alertTemplate = refundFailedAlertEmail(order.data.id, paymentId);
           sendEmail({
-            to: process.env.ADMIN_EMAILS?.split(',') || [],
+            to: ADMIN_EMAILS,
             subject: alertTemplate.subject,
             html: alertTemplate.html,
           }).catch((err) => {
