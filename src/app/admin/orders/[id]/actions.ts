@@ -166,9 +166,19 @@ export async function rejectOrderAction(
         // Import Razorpay client
         const { razorpayClient } = await import('@/utils/razorpay/client');
 
+        // DIAGNOSTIC: Log the exact refund amount being calculated
+        const refundAmountPaise = Math.round(order.total_incl_gst * 100);
+        console.log('Attempting refund:', {
+          orderId,
+          razorpayPaymentId: order.razorpay_payment_id,
+          totalInclGstRaw: order.total_incl_gst,
+          totalInclGstType: typeof order.total_incl_gst,
+          computedAmountPaise: refundAmountPaise,
+        });
+
         // Initiate full refund (amount in paise)
         const refund = await razorpayClient.payments.refund(order.razorpay_payment_id, {
-          amount: Math.round(order.total_incl_gst * 100),
+          amount: refundAmountPaise,
         });
 
         // Update order with refund details
