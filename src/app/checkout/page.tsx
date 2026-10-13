@@ -3,6 +3,7 @@ import { requireRole } from '@/utils/auth/require-role';
 import { createClient } from '@/utils/supabase/server';
 import { calculateTradePrice, calculateGstAmount } from '@/utils/pricing';
 import { getMyApplicationDetails } from '@/utils/trade/get-my-application-details';
+import { isOnlinePaymentEnabled } from '@/utils/razorpay/is-online-payment-enabled';
 import { CheckoutForm } from './CheckoutForm';
 
 export default async function CheckoutPage() {
@@ -89,6 +90,9 @@ export default async function CheckoutPage() {
     redirect('/cart');
   }
 
+  // Check if online payment is enabled
+  const onlinePaymentEnabled = isOnlinePaymentEnabled();
+
   return (
     <div className="bg-white min-h-screen">
       <div className="container mx-auto px-4 py-12">
@@ -174,7 +178,7 @@ export default async function CheckoutPage() {
                 This is required to process your order.
               </p>
 
-              <CheckoutForm userId={user.id} />
+              <CheckoutForm userId={user.id} onlinePaymentEnabled={onlinePaymentEnabled} />
             </div>
           </div>
 

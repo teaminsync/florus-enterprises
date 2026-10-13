@@ -8,6 +8,7 @@ import { requireTradeAccountReady } from '@/utils/auth/require-trade-account-rea
 import { sendEmail } from '@/utils/email/send';
 import { orderSubmittedCustomerEmail, orderSubmittedAdminEmail } from '@/utils/email/templates';
 import { ADMIN_EMAILS } from '@/utils/email/admin-recipients';
+import { isOnlinePaymentEnabled } from '@/utils/razorpay/is-online-payment-enabled';
 
 export async function submitOrderAction(formData: FormData) {
   const userId = formData.get('userId') as string;
@@ -19,6 +20,16 @@ export async function submitOrderAction(formData: FormData) {
 
   if (!userId || !poFile) {
     return { success: false, error: 'Missing required data' };
+  }
+
+  // Validate payment method
+  if (paymentMethod !== 'cod' && paymentMethod !== 'online') {
+    return { success: false, error: 'Invalid payment method' };
+  }
+
+  // Check if online payment is available when requested
+  if (paymentMethod === 'online' && !isOnlinePaymentEnabled()) {
+    return { success: false, error: 'Online payment is currently unavailable.' };
   }
 
   // Check trade account is authenticated and password is set
@@ -231,6 +242,11 @@ export async function submitOrderAction(formData: FormData) {
  * Returns the razorpay_order_id, amount in paise, and key_id for client-side checkout.
  */
 export async function createRazorpayOrderAction() {
+  // Gate: check if online payment is enabled FIRST
+  if (!isOnlinePaymentEnabled()) {
+    return { success: false, error: 'Online payment is currently unavailable.' };
+  }
+
   // Check trade account is authenticated and password is set
   const authCheck = await requireTradeAccountReady();
   if (!authCheck.success) {

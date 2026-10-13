@@ -6,6 +6,7 @@ import { submitOrderAction, createRazorpayOrderAction } from './actions';
 
 interface CheckoutFormProps {
   userId: string;
+  onlinePaymentEnabled: boolean;
 }
 
 const ACCEPTED_FILE_TYPES = [
@@ -24,7 +25,7 @@ declare global {
   }
 }
 
-export function CheckoutForm({ userId }: CheckoutFormProps) {
+export function CheckoutForm({ userId, onlinePaymentEnabled }: CheckoutFormProps) {
   const router = useRouter();
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'online' | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -216,25 +217,27 @@ export function CheckoutForm({ userId }: CheckoutFormProps) {
             </div>
           </label>
 
-          <label className="flex items-start p-4 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
-            <input
-              type="radio"
-              name="paymentMethod"
-              value="online"
-              checked={paymentMethod === 'online'}
-              onChange={(e) => setPaymentMethod('online')}
-              disabled={isSubmitting}
-              className="mt-1 h-4 w-4 text-[#009EE0] focus:ring-[#009EE0]"
-            />
-            <div className="ml-3">
-              <span className="block text-sm font-medium text-gray-900">
-                Pay Online
-              </span>
-              <span className="block text-xs text-gray-500 mt-1">
-                Secure payment via Razorpay (Cards, UPI, Net Banking, Wallets)
-              </span>
-            </div>
-          </label>
+          {onlinePaymentEnabled && (
+            <label className="flex items-start p-4 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="online"
+                checked={paymentMethod === 'online'}
+                onChange={(e) => setPaymentMethod('online')}
+                disabled={isSubmitting}
+                className="mt-1 h-4 w-4 text-[#009EE0] focus:ring-[#009EE0]"
+              />
+              <div className="ml-3">
+                <span className="block text-sm font-medium text-gray-900">
+                  Pay Online
+                </span>
+                <span className="block text-xs text-gray-500 mt-1">
+                  Secure payment via Razorpay (Cards, UPI, Net Banking, Wallets)
+                </span>
+              </div>
+            </label>
+          )}
         </div>
       </div>
 
