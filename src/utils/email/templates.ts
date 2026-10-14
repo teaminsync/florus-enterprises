@@ -404,6 +404,8 @@ export function orphanedPaymentAlertEmail(paymentId: string, amountInPaise: numb
       <p style="margin: 0; color: #7C2D12; font-size: 14px;"><strong>Amount:</strong> ₹${amountInRupees}</p>
     </div>
 
+    <p style="margin: 24px 0 16px 0; color: #7C2D12; font-size: 16px; line-height: 1.6;"><strong>This alert is sent only if no order existed for this payment 40 seconds after it was captured. Before doing anything else, check /admin/orders for an order with this Payment ID. A very slow upload can occasionally still be in progress. Only if no order exists should you contact the customer or refund the payment.</strong></p>
+
     <p style="margin: 24px 0 16px 0; color: #7C2D12; font-size: 16px; line-height: 1.6;"><strong>Possible causes:</strong></p>
     <ul style="margin: 0 0 24px 0; padding-left: 24px; color: #7C2D12; font-size: 15px; line-height: 1.8;">
       <li>Signature verification failed after payment capture</li>

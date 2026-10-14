@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { validateWebhookSignature } from 'razorpay/dist/utils/razorpay-utils';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { sendEmail } from '@/utils/email/send';
 import { orphanedPaymentAlertEmail, refundFailedAlertEmail } from '@/utils/email/templates';
 import { ADMIN_EMAILS } from '@/utils/email/admin-recipients';
+
+export const maxDuration = 60;
 
 /**
  * Razorpay Webhook Handler
@@ -12,7 +14,7 @@ import { ADMIN_EMAILS } from '@/utils/email/admin-recipients';
  * Security: validates X-Razorpay-Signature against RAZORPAY_WEBHOOK_SECRET.
  * 
  * Events handled:
- * - payment.captured: safety net for orphaned payments
+ * - payment.captured: safety net for orphaned payments (with grace window)
  * - refund.processed: authoritative refund confirmation
  * - refund.failed: refund failure alert
  */
@@ -74,21 +76,54 @@ export async function POST(request: NextRequest) {
           .maybeSingle();
 
         if (!existingOrder) {
-          // ORPHANED PAYMENT - payment succeeded but no order created
-          console.error('CRITICAL: Orphaned payment detected', {
-            paymentId,
-            amountInPaise,
-            eventId,
-          });
+          // Payment arrived before order - schedule grace-window check
+          console.warn('Orphan check scheduled', { paymentId });
+          
+          // Use after() to decouple from the response (runs after 200 is returned)
+          after(async () => {
+            const adminClientDeferred = createAdminClient();
+            let orderFound = false;
+            const maxAttempts = 8;
+            const delayMs = 5000;
 
-          // Send urgent admin alert (non-blocking)
-          const alertTemplate = orphanedPaymentAlertEmail(paymentId, amountInPaise);
-          sendEmail({
-            to: ADMIN_EMAILS,
-            subject: alertTemplate.subject,
-            html: alertTemplate.html,
-          }).catch((err) => {
-            console.error('Failed to send orphaned payment alert:', err);
+            // Poll for up to ~40 seconds
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+              const { data: orderCheck } = await adminClientDeferred
+                .from('orders')
+                .select('id')
+                .eq('razorpay_payment_id', paymentId)
+                .maybeSingle();
+
+              if (orderCheck) {
+                orderFound = true;
+                console.log('Orphan check cleared: order found', { paymentId, attempt });
+                break;
+              }
+            }
+
+            // If still no order after grace window, send alert
+            if (!orderFound) {
+              console.error('CRITICAL: Orphaned payment confirmed after grace window', {
+                paymentId,
+                amountInPaise,
+                eventId,
+              });
+
+              const alertTemplate = orphanedPaymentAlertEmail(paymentId, amountInPaise);
+              const emailResult = await sendEmail({
+                to: ADMIN_EMAILS,
+                subject: alertTemplate.subject,
+                html: alertTemplate.html,
+              });
+
+              if (!emailResult.success) {
+                console.error('Failed to send orphaned payment alert:', emailResult.error);
+              } else {
+                console.log('Orphaned payment alert sent successfully');
+              }
+            }
           });
         }
         // If order exists, this is just confirmation - no action needed
@@ -170,15 +205,19 @@ export async function POST(request: NextRequest) {
             console.error('Failed to update order payment_status to refund_failed:', updateError);
           }
 
-          // Send urgent admin alert (non-blocking)
+          // Send urgent admin alert
           const alertTemplate = refundFailedAlertEmail(order.data.id, paymentId);
-          sendEmail({
+          const emailResult = await sendEmail({
             to: ADMIN_EMAILS,
             subject: alertTemplate.subject,
             html: alertTemplate.html,
-          }).catch((err) => {
-            console.error('Failed to send refund failed alert:', err);
           });
+
+          if (!emailResult.success) {
+            console.error('Failed to send refund failed alert:', emailResult.error);
+          } else {
+            console.log('Refund failed alert sent successfully');
+          }
 
           console.error('CRITICAL: Refund failed for order', {
             orderId: order.data.id,
