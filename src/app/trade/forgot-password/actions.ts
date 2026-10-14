@@ -17,15 +17,35 @@ export async function requestPasswordResetAction(formData: FormData) {
   const adminClient = createAdminClient();
 
   try {
-    // Check if account exists (using admin client to bypass RLS)
-    const { data: userAuth } = await adminClient.auth.admin.listUsers();
-    const accountExists = userAuth?.users?.some(u => u.email === email);
+    // Check if account exists using pagination-safe RPC
+    let emailToUse = email;
+    let { data: emailExists, error: checkError } = await adminClient
+      .rpc('check_auth_email_exists', { check_email: email });
 
-    if (accountExists) {
+    if (checkError) {
+      console.error('Failed to check existing email:', checkError);
+      // Fall through to generic success response
+    }
+
+    // If not found and email has uppercase, try lowercased version
+    if (!emailExists && email.toLowerCase() !== email) {
+      const lowercasedEmail = email.toLowerCase();
+      const { data: lowercaseExists, error: lowercaseCheckError } = await adminClient
+        .rpc('check_auth_email_exists', { check_email: lowercasedEmail });
+
+      if (lowercaseCheckError) {
+        console.error('Failed to check lowercased email:', lowercaseCheckError);
+      } else if (lowercaseExists) {
+        emailExists = true;
+        emailToUse = lowercasedEmail;
+      }
+    }
+
+    if (emailExists) {
       // Generate recovery link
       const { data, error: linkError } = await adminClient.auth.admin.generateLink({
         type: 'recovery',
-        email,
+        email: emailToUse,
       });
 
       if (linkError || !data.properties?.hashed_token) {
@@ -37,7 +57,7 @@ export async function requestPasswordResetAction(formData: FormData) {
         // Send password reset email
         const resetEmailTemplate = passwordResetRequestedEmail(resetUrl);
         await sendEmail({
-          to: email,
+          to: emailToUse,
           subject: resetEmailTemplate.subject,
           html: resetEmailTemplate.html,
         }).catch((err) => {

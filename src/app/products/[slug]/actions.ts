@@ -8,7 +8,7 @@ export async function addToCartAction(formData: FormData) {
   const productId = formData.get('productId') as string;
   const quantity = parseInt(formData.get('quantity') as string, 10);
 
-  if (!productId || isNaN(quantity) || quantity < 1) {
+  if (!productId || !Number.isInteger(quantity) || quantity < 1 || quantity > 9999) {
     return { success: false, error: 'Invalid product or quantity' };
   }
 
