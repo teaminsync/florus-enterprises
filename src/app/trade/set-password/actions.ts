@@ -35,6 +35,15 @@ export async function setPasswordAction(formData: FormData) {
 
   if (error) {
     console.error('Password update error:', error);
+    
+    // Provide specific message for same_password error
+    if (error.code === 'same_password') {
+      return {
+        success: false,
+        error: 'Your new password must be different from your current password.',
+      };
+    }
+    
     return {
       success: false,
       error: 'Failed to set password. Please try again.',

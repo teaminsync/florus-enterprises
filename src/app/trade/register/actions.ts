@@ -10,11 +10,14 @@ export async function submitTradeApplication(formData: FormData) {
   const applicantType = formData.get('applicant_type') as string;
   const fullName = formData.get('full_name') as string;
   const phone = formData.get('phone') as string;
-  const email = formData.get('email') as string;
+  let email = formData.get('email') as string;
   const address = formData.get('address') as string;
   const city = formData.get('city') as string;
   const state = formData.get('state') as string;
   const pincode = formData.get('pincode') as string;
+
+  // Normalize email immediately
+  email = email?.trim().toLowerCase();
 
   // Optional fields based on type
   const businessOrClinicName = formData.get('business_or_clinic_name') as string | null;

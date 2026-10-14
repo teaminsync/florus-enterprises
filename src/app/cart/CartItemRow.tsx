@@ -26,21 +26,32 @@ export function CartItemRow({
   unitPriceExGst,
   lineSubtotalExGst,
 }: CartItemRowProps) {
-  const [quantity, setQuantity] = useState(initialQuantity);
+  const [committedQty, setCommittedQty] = useState(initialQuantity);
+  const [inputValue, setInputValue] = useState(String(initialQuantity));
   const [isUpdating, setIsUpdating] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
 
-  async function handleUpdateQuantity(newQuantity: number) {
-    if (newQuantity < 1 || newQuantity === quantity) return;
+  async function commitQuantity() {
+    const parsed = Number(inputValue);
+
+    // Validate: must be integer, >= 1, <= 9999
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 9999) {
+      setInputValue(String(committedQty));
+      return;
+    }
+
+    // No change, nothing to do
+    if (parsed === committedQty) return;
 
     setIsUpdating(true);
-    setQuantity(newQuantity);
 
-    const result = await updateCartItemAction(cartItemId, newQuantity);
+    const result = await updateCartItemAction(cartItemId, parsed);
 
-    if (!result.success) {
-      // Revert on error
-      setQuantity(quantity);
+    if (result.success) {
+      setCommittedQty(parsed);
+      setInputValue(String(parsed));
+    } else {
+      setInputValue(String(committedQty));
       alert(result.error || 'Failed to update quantity');
     }
 
@@ -103,14 +114,14 @@ export function CartItemRow({
                   type="number"
                   min="1"
                   max="9999"
-                  value={quantity}
-                  onChange={(e) => {
-                    const newQty = Math.max(1, parseInt(e.target.value) || 1);
-                    setQuantity(newQty);
-                  }}
-                  onBlur={(e) => {
-                    const newQty = Math.max(1, parseInt(e.target.value) || 1);
-                    handleUpdateQuantity(newQty);
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onBlur={() => commitQuantity()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitQuantity();
+                    }
                   }}
                   disabled={isUpdating || isRemoving}
                   className="w-20 px-3 py-1 border border-gray-300 rounded-md text-center focus:ring-2 focus:ring-[#009EE0] focus:border-transparent outline-none disabled:bg-gray-100"
@@ -120,13 +131,13 @@ export function CartItemRow({
               <div className="text-right">
                 <p className="text-sm text-gray-500">Line Total (ex-GST)</p>
                 <p className="text-xl font-bold text-[#009EE0]">
-                  ₹{(unitPriceExGst * quantity).toFixed(2)}
+                  ₹{(unitPriceExGst * committedQty).toFixed(2)}
                 </p>
               </div>
             </>
           ) : (
             <div className="text-right text-gray-400">
-              <p className="text-sm">Quantity: {quantity}</p>
+              <p className="text-sm">Quantity: {committedQty}</p>
               <p className="text-sm">Price unavailable</p>
             </div>
           )}
