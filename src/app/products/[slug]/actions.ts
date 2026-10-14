@@ -35,19 +35,42 @@ export async function addToCartAction(formData: FormData) {
     return { success: false, error: 'This product does not have pricing available yet' };
   }
 
-  // 3. Upsert into cart_items (increment quantity if already exists)
+  // Read current cart quantity to increment instead of replace
+  const { data: existing, error: readError } = await supabase
+    .from('cart_items')
+    .select('quantity')
+    .eq('user_id', authCheck.userId)
+    .eq('product_id', productId)
+    .maybeSingle();
+
+  if (readError) {
+    console.error('Failed to read cart item:', readError);
+    return { success: false, error: 'Failed to add item to cart' };
+  }
+
+  const existingQty = existing?.quantity ?? 0;
+  const newQty = existingQty + quantity;
+
+  // Check per-item maximum
+  if (newQty > 9999) {
+    return {
+      success: false,
+      error: `You already have ${existingQty} of this item in your cart. The maximum per item is 9999.`,
+    };
+  }
+
+  // Upsert with the new total quantity
   const { error: upsertError } = await supabase
     .from('cart_items')
     .upsert(
       {
         user_id: authCheck.userId,
         product_id: productId,
-        quantity: quantity,
+        quantity: newQty,
         updated_at: new Date().toISOString(),
       },
       {
         onConflict: 'user_id,product_id',
-        // When conflict, increment the existing quantity
         ignoreDuplicates: false,
       }
     );
@@ -60,5 +83,8 @@ export async function addToCartAction(formData: FormData) {
   // Revalidate the cart page
   revalidatePath('/cart');
 
-  return { success: true, message: 'Item added to cart' };
+  return {
+    success: true,
+    message: existingQty > 0 ? `Added to cart. You now have ${newQty} in your cart.` : 'Item added to cart',
+  };
 }
