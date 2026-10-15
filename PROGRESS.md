@@ -1,228 +1,153 @@
 # Progress — Florus Enterprises
 
-Dated log of completed checkpoints. Each entry reflects the final,
-corrected state of that checkpoint's work — where something was found and
-fixed after the checkpoint's initial pass (schema bugs, data-accuracy
-corrections), this log records the outcome, not the intermediate mistake.
-See `TROUBLESHOOTING.md` for the full story behind anything non-obvious
-referenced here.
+A dated log of what was built, the decisions behind it, and what was verified. Each entry records the final state of that checkpoint. Bugs found and their root causes are in [TROUBLESHOOTING.md](TROUBLESHOOTING.md); the system itself is described in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+Dates come from migration timestamps, commits and deployment records. Entries marked "Sep 2026" have no recorded day. "Verified" always means a real observation (a terminal result, a database row, or a browser test), never code inspection alone.
+
+## Current state (October 14, 2026)
+
+- Live at <https://www.florus.in>: public catalog of 228 products, trade registration and approval, trade pricing, cart, checkout with purchase-order upload, admin order review, and transactional email.
+- **Cash on delivery is live. Online payment is built and tested in Razorpay test mode but hidden in production** until live keys exist (account activation pending).
+- Test-mode refund path verified end to end, including the webhook that marks refunds complete.
+
+## Planned before go-live
+
+- Harden payment verification before online payment is enabled.
+- Seed categories in a migration so a new database builds in one step.
+- Razorpay account activation, live keys and a live webhook (steps in the README).
+- Florus to supply the missing SAP code for TELMICLAR TAB 40MG,15'S.
 
 ---
 
-## Checkpoint 1 — Project Scaffolding
-**Completed:** August 27, 2026
+## Foundation
 
-Next.js 16.3 (App Router, TypeScript, Tailwind, `src/` directory) created
-via `create-next-app`. Supabase client helpers established:
-`src/utils/supabase/client.ts` (browser), `server.ts` (cookie-based
-server client), `middleware.ts` + root `src/middleware.ts` (session
-refresh — includes the `supabase.auth.getUser()` call the middleware
-needs to actually do anything; a version without it would compile but
-silently do nothing). Supabase CLI installed, project linked to
-`elwqbhuaycalotcgxbjh`. `.env.local` populated with the current-format
-`sb_publishable_`/`sb_secret_` keys. Connection verified via a real
-round-trip query, not just successful client construction.
+### Checkpoint 1 — Scaffolding · Aug 27, 2026
+- Next.js (App Router, TypeScript, Tailwind, `src/`). Supabase client helpers: browser, cookie-based server, middleware.
+- Middleware calls `getUser()`, which is what makes session refresh work.
+- Supabase CLI linked. Connection verified with a real round-trip query.
 
----
+### Checkpoint 2 — Schema and seed data · Aug 27, 2026
+- Eight tables with RLS enabled from the start. 17 categories (deduplicated from inconsistent spellings across price lists). 23 sample products, including two unpriced "upcoming" ones.
+- Public read policies for categories and active products.
 
-## Checkpoint 2 — Database Schema & Seed Data
-**Completed:** August 27, 2026
+### Checkpoint 3 — Public site and catalog · Aug 27, 2026
+- Home, About, Contact, Medicines (search and category filter), product detail. Categories read live from the database.
+- Found and fixed: policies without matching `GRANT`s caused `permission denied`. Verified through both `pg_policies` and `role_table_grants`.
 
-Full schema created via CLI migrations: `categories`, `products`,
-`profiles`, `trade_applications`, `cart_items`, `orders`, `order_items`,
-`order_status_history`. RLS enabled on all eight tables from the start.
-17 real categories seeded (deduplicated from Florus's actual price
-sheets' inconsistent spellings — "Antiboitics"/"Anti-Biotics" → 
-"Antibiotics", etc.). 23 real sample products seeded across all 17
-categories, transcribed verbatim from the source price lists, including
-two intentionally unpriced ("upcoming") products to prove the schema
-tolerates `sp = null`.
+### Checkpoint 4 — Auth, registration and approval · Aug 28, 2026
+- Session auth, `requireRole()`, trade registration, admin applications queue.
+- Decision: invites use `generateLink` and a `/auth/confirm` route (PKCE-compatible), not `inviteUserByEmail`.
+- Idempotent `seed-admin.ts`. Fixed trade profiles missing `account_type` and applications missing `linked_profile_id`.
+- Verified: real registration, approval, invite click, password set and login in a browser.
 
-Public read policies added for `categories` (fully public) and `products`
-(active rows only) — this checkpoint's RLS policies were written correctly
-but, unknown at the time, were incomplete without a matching `GRANT` (see
-Checkpoint 3 and `TROUBLESHOOTING.md` #1).
+### Checkpoint 5 — Trade pricing, cart and checkout · Aug 28, 2026
+- Trade price = `sp × 1.10`, GST-exclusive, GST shown only at cart and checkout. Server-side cart. Checkout with required PO upload to a private bucket. Immutable price snapshots.
+- Found and fixed before any real order: a nonexistent `gst_percent` insert, and order GST hardcoded at 5%.
+- Verified: checkout with a real PO file, and snapshot immutability (changing a product's `sp` left an existing order's price unchanged).
+- Correction recorded later: this entry originally claimed quantity editing was verified. It was not; editing never saved until Checkpoint 31.
 
----
+### Checkpoint 6 — Admin order review · Aug 29, 2026
+- Order state machine, admin order list and detail, PO preview and download, revision and resubmission loop. Every action re-reads the order's current status before acting.
+- Found and fixed: a query selected `profiles.email`, which does not exist.
+- Verified: approve, reject, needs-revision then resubmit, approve then fulfill, an illegal transition refused, and both resubmission guards.
 
-## Checkpoint 3 — Public Site Shell & Catalog
-**Completed:** August 27, 2026
+### Checkpoint 7 — Full catalog import · Sep 2, 2026
+- 228 products from six price lists (Nexxon 60, Sorvus 73, Trion 19, Critical Care 8, Spectrum 68). A seventh sheet added nothing (all duplicates).
+- Open data issue: "TELMICLAR TAB 40MG,15'S" imported with no SAP code because the source reused another product's code.
 
-Public pages built: `/`, `/about`, `/contact`, `/medicines` (search +
-category filter), `/products/[slug]`. Category navigation pulled live
-from the database, not hardcoded. MRP-only pricing throughout.
-
-**Bug found and fixed mid-checkpoint**: both `/medicines` and the home
-page's category grid rendered empty — `categories`/`products` reads were
-failing with `permission denied for table X` despite correct RLS policies,
-because tables created via CLI migrations never received Supabase
-Studio's automatic default `GRANT`. Fixed with an explicit `grant select`
-migration; verified independently via `information_schema.role_table_grants`
-in addition to `pg_policies`, since the earlier RLS-only verification had
-looked complete but wasn't. This was the first occurrence of a pattern
-that recurred in later checkpoints — see `TROUBLESHOOTING.md` #1.
-
-Category filter and full-text search (matching on both `name` and
-`composition`) verified against real seeded data, including a
-composition-only match to prove the search wasn't silently checking only
-one column.
+### Checkpoint 8 — Design consistency pass · Sep 4, 2026
+- One type scale, spacing rhythm, color rule and card style across every page. Session-aware header. Responsive layouts audited.
+- Visual quality was judged by the owner in a browser.
 
 ---
 
-## Checkpoint 4 — Auth, Trade Registration & Admin Approval
-**Completed:** August 28, 2026
+## Operations and polish
 
-Real session-based auth via `@supabase/ssr`. `requireRole()` helper
-established as the standard pattern for every protected page — derives
-role from the server-verified session plus a `profiles` lookup, never
-from anything client-supplied. Trade registration form (`/trade/register`)
-with applicant-type-specific fields. Admin applications queue
-(`/admin/applications`) with approve/reject.
+### Deployment · first production environment variables Sep 6, 2026
+- Deployed on Vercel at `www.florus.in` (`florus.in` redirects to it).
+- Decision: the repository was made public because Vercel Hobby cannot build private organization repositories. A full history scan for secrets found nothing first.
 
-**Design decision, made deliberately mid-checkpoint**: Supabase's default
-`inviteUserByEmail()` uses implicit-flow tokens incompatible with this
-project's PKCE-flow browser client, and the project has no custom SMTP
-configured (required to edit Supabase's locked default email templates).
-Rather than stand up email infrastructure mid-checkpoint, switched to
-`admin.generateLink()` — the resulting invite link is displayed directly
-to the admin in the UI to relay manually, which fits how Florus already
-verifies trade applicants (by phone) before approving them. See
-`ARCHITECTURE.md` for the full mechanism.
+### Checkpoint 9a — Rejection reasons · Sep 6, 2026
+- `trade_applications.rejection_reason` and a reject control that requires a reason.
 
-Idempotent admin-seed script established (`scripts/seed-admin.ts`) after
-an earlier version was found to silently do nothing on a second run if
-the first run had partially failed — fixed to correctly detect and handle
-"auth user exists but profile doesn't" as a real, recoverable state.
+### Checkpoint 9b — Transactional email · Sep 2026
+- Resend with a verified `florus.in` domain. 13 lifecycle templates wired into the actions. Rule: an email failure never breaks the business action.
+- Admin notifications go to three addresses. Verified in a manual pass.
 
-Two real data bugs found via direct database inspection after initial
-browser testing (not caught by any automated check): approved trade
-profiles had `account_type` left `null`, and `trade_applications.
-linked_profile_id` was never set despite being part of the original spec.
-Both fixed at the source and confirmed via the same real approved
-accounts, backfilled where the bug had already produced live rows.
+### Checkpoint 9c — Duplicate-account guard · Sep 6, 2026
+- `check_auth_email_exists` (security definer, service role only) called at registration. Approved but not-yet-active emails are blocked; rejected applicants can reapply.
 
-Full end-to-end flow — real registration, real admin approval, real
-invite-link click-through, real password set, real login — verified in
-an actual browser, not simulated.
+### Checkpoints 10–12 — Catalog browsing · Sep 2026
+- Instant client-side search (name and composition), category and brand pills, dosage-form dropdown (server-side URL filters, combined), sort, and 24-per-page pagination.
 
----
+### Checkpoint 13 — Logo and favicons · Sep 2026
+- SVG logo as a plain `<img>`, favicon set and web manifest.
 
-## Checkpoint 5 — Trade Pricing, Cart & Checkout
-**Completed:** August 28, 2026
+### Checkpoint 14 — Contact form · Sep 2026
+- Server action posting to Google Apps Script, honeypot field, Resend confirmation to the visitor. Fixed a stale form reference after `await`.
 
-Trade pricing formula implemented: `trade_price_ex_gst = products.sp ×
-1.10`, GST (`products.gst_percent`, per-product, not hardcoded) shown as
-a separate line only at cart/checkout — confirmed as the intended display
-convention before implementation, not assumed. Server-side cart
-(`cart_items`), checkout with required PO upload to a private Storage
-bucket (`po-uploads`), real order creation with immutable per-line price
-snapshots (`order_items.unit_price_ex_gst_snapshot`).
+### Checkpoints 15–23 — Authentication hardening · Sep 2026 (migration Sep 8)
+- Signed-in users redirected away from login and forgot-password; registration left open on purpose.
+- `profiles.password_set` introduced after a redirect change broke the real invite flow. Page gate (`requireRole`) and action gate (`requireTradeAccountReady`) both enforce it.
+- Forgot-password flow with generic responses; recovery links via Resend; `flow=recovery` handling after recovery links bounced to the dashboard.
+- Welcome email only on first activation, "password changed" email afterwards.
+- A single shared admin account was accepted.
+- All flows tested in a browser.
 
-**Two real bugs found before any real order had ever been placed**, both
-from the same underlying cause — code that had never actually been
-executed against the real schema:
-- The checkout insert included a `gst_percent` field on `order_items`
-  that the table doesn't have; would have failed the first real checkout
-  outright. Fixed by removing it.
-- The order's total GST was computed as a hardcoded 5% of the subtotal
-  rather than summed from each line's real per-product rate — invisible
-  under normal testing because every seeded product happens to be 5%.
-  Fixed to accumulate real per-line GST; verified by deliberately testing
-  with a temporary 18%-GST product alongside a real 5% product in the
-  same order and confirming the stored total matched the true sum.
+### Checkpoint 24 — Real site copy · Sep 2026
+- Home, About, Contact, footer and metadata rewritten from the owner's content pool. No import/export licence number or capability is shown, because it is inactive.
 
-Full lifecycle — add to cart, edit quantities, checkout with a real PO
-file, and (the most important property of this checkpoint) **price
-snapshot immutability** — verified in a real browser: an existing order's
-stored unit price was confirmed unchanged after deliberately updating the
-underlying product's `sp` and reloading the order.
+### Checkpoint 25 — Registration fields, PO preview, account details · Sep 11, 2026
+- Per-applicant-type fields (new `gst_number` and `authorized_signatory`), validated on the server.
+- PO preview at checkout. Dashboard shows full read-only registration details. Checkout shows a fixed delivery address.
+- Decisions: no self-service edits and no delivery-address override.
+- Fixed a helper that silently returned null for the locked-down applications table. All four applicant types tested.
 
 ---
 
-## Checkpoint 6 — Admin Order Review & Resubmission Loop
-**Completed:** August 29, 2026
+## Payments
 
-Full order lifecycle implemented: `/admin/orders` (list, filterable by
-status, with counts) and `/admin/orders/[id]` (detail, PO preview via
-dual signed URLs — one inline, one forced-download — and status-transition
-actions). Legal transitions enforced via `canAdminTransition()` /
-`canTradeUserResubmit()` (`src/utils/orders/transitions.ts`), with every
-action re-fetching the order's real current status immediately before
-acting, to prevent a stale or double-submitted form from illegally
-transitioning an order that's already moved on.
+### Checkpoint 26 — Razorpay online payment · Sep 13, 2026
+- Cash on delivery or Pay Online; nothing preselected; PO required for both. Totals computed on the server. Checkout signature verified before the order is created.
+- New payment columns on `orders`; payment details on trade and admin order pages.
+- Verified in test mode: COD unchanged, online success, failure screen, and modal dismissal.
 
-**Bug found before any real order review had happened**: both new admin
-pages selected `email` from a `profiles` join; `profiles` has no `email`
-column (it lives on `auth.users` only). Fixed by fetching it separately
-via the Auth Admin API.
+### Checkpoint 27 — Refunds and webhook · Sep 2026
+- Rejecting a captured online order refunds it in full automatically. The rejection stands even if the refund fails, which raises an urgent alert.
+- Webhook handles `payment.captured`, `refund.processed` and `refund.failed`.
+- Found and fixed: alert emails used a nonexistent variable and went to nobody.
+- Verified: approve path; a refund failure produced the alert email. Remaining tests were completed in Checkpoints 28–29 (below).
 
-Full lifecycle exercised for real: one order approved, one rejected (with
-feedback), one sent to `needs_revision` and then genuinely resubmitted by
-the trade user with a new PO (confirming `admin_feedback` clears and
-status returns to `pending_verification`), one approved then marked
-fulfilled. Illegal-transition guard confirmed by actually attempting to
-approve an already-rejected order and observing the real rejection.
-Resubmission's two independent guards (ownership, correct status)
-confirmed by attempting each failure case directly, not just described.
-Full sequence also manually re-verified in a live browser session by
-creating three real orders through the actual trade/admin UI.
+### Checkpoint 28 — Online payment availability gate · Oct 13, 2026
+- Pay Online appears only when all three Razorpay variables are set and, in production builds, the key is a live key. Both server actions refuse online payment otherwise and validate the payment method.
+- Verified: option present locally, hidden when the webhook secret was removed, and hidden on the production checkout.
+
+### Checkpoint 29 — Orphan-payment grace window · Oct 14, 2026
+- A captured payment with no order is re-checked for about 40 seconds before alerting. Alert emails are awaited.
+- Verified: a signed fake event produced one alert after about 45 seconds; a real paid order produced none; rejection still moved the order to `refunded` through the production webhook; marking an order needs-revision left the payment `captured` with no refund, and a later rejection after resubmission refunded normally.
+- Also verified on production: missing and invalid webhook signatures return 400.
 
 ---
 
-## Checkpoint 7 — Full Catalog Import
-**Completed:** September 2, 2026
+## Hardening and cleanup
 
-All 228 real products imported from Florus's six source price lists, up
-from the 23-item Checkpoint 2 sample. Real, verified breakdown by brand
-line (queried directly, not computed by hand): Axera Nexxon 60, Sorvus
-Franchisee 73, Axera Trion 19 (11 launched + 8 upcoming, including one
-intentionally-`NULL`-SAP-code row — see below), Axera Critical Care 8,
-Axera Spectrum 68. The separate GRPPL Critical Care Franchisee sheet
-contributed zero new rows — every one of its SAP codes duplicates a row
-already present on the GRPPL Franchisee sheet, confirmed before import.
+### Checkpoint 30 — Pagination-safe reset, cart gates, dead code · Oct 14, 2026
+- Password-reset lookup uses `check_auth_email_exists` instead of the first page of users.
+- Cart update and remove use the account gate; quantity validated as an integer from 1 to 9,999.
+- Removed two unused files. Verified: the build passes, and the reset email arrives for an existing account but not for an unknown one.
 
-Migration used `ON CONFLICT (sap_code) DO NOTHING`, so the original 23
-sample products were preserved rather than duplicated.
+### Checkpoint 31 — Cart quantity, registration email, password message · Oct 14, 2026
+- Cart quantity edits now save (the bug had existed since Checkpoint 5). Registration lowercases email. A reused password gets a clear message.
+- Verified in a browser: edit saves and survives refresh; 0, blank and 10,000 revert; Enter saves; remove works; `Doctor@florus.in` is blocked as a duplicate.
 
-**Known, flagged, unresolved data issue**: the source Axera Trion sheet
-lists two genuinely different products under the same SAP code
-(5602597). Rather than fabricate a distinct code, the second product
-("TELMICLAR TAB 40MG,15'S") was imported with `sap_code = NULL`. Florus
-needs to supply the real code.
+### Checkpoint 32 — Add to cart increments · Oct 14, 2026
+- Adding an item already in the cart adds to its quantity, capped at 9,999 with a clear error.
+- Verified in a browser: 5 then 3 gives 8; adding 9,992 more is refused; a second product adds normally.
 
-A minor post-import metadata inconsistency (two products sharing a
-duplicate-sheet origin were labeled with different `brand_line` values
-depending on which checkpoint's data entry pass touched them first) was
-found and corrected for consistency; not a functional issue, purely
-cosmetic.
+### Checkpoint 33 — Admin role enforced on application actions · Oct 14, 2026
+- Approve and reject now verify the admin role on the server and take the reviewer from the session instead of the submitted form.
+- Every other server action was audited: all 18 are either gated (`requireRole` or `requireTradeAccountReady`), tied to the session, or intentionally public (contact, login, registration, forgot-password).
+- Verified on production: three approvals (invite link shown to the admin and emailed) and one rejection with a reason (emailed). On all four applications `reviewed_by` was the admin's profile ID taken from the session, and approved applicants received profiles.
 
----
-
-## Checkpoint 8 — Design Consistency & Polish Pass
-**Completed:** September 4, 2026
-
-Site-wide visual consistency pass across every page, with no functional,
-schema, or business-logic changes. Established and applied a single
-reference for type scale, spacing rhythm, color usage, and card styling
-(documented in full in `ARCHITECTURE.md`'s "Design System" section) across
-pages that had been built independently across seven prior sessions and
-had predictably drifted (inconsistent heading sizes, spacing values, and
-button treatments between e.g. Checkpoint 3's public pages and
-Checkpoint 5/6's cart/checkout/admin pages).
-
-Header made session-aware: anonymous visitors see the trade-registration
-CTA; logged-in trade users see Cart/Orders links and an account menu;
-logged-in admins see an Admin link and dashboard shortcut, rather than
-every visitor seeing the same "Register" prompt regardless of session
-state.
-
-Responsive breakpoints audited and corrected on the site's more complex
-layouts (catalog grid, cart/checkout two-column layouts, admin order
-detail with PO preview + sidebar) to confirm real `sm:`/`md:`/`lg:`
-degradation rather than a fixed desktop-only layout.
-
-`npm run build` confirmed clean throughout. Final visual judgment (does
-it actually *look* premium and consistent, not just pass a lint/build
-check) was done by the project owner directly in a browser, not asserted
-by the coding agent — this checkpoint's evidence bar is necessarily
-different from the data-driven checkpoints before it.
+### Documentation rewrite · Oct 14, 2026
+- README, ARCHITECTURE, TROUBLESHOOTING and PROGRESS rewritten as consolidated documents, with a proprietary-software notice in the README.

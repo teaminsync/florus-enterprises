@@ -1,174 +1,194 @@
 # Troubleshooting — Florus Enterprises
 
-Real bugs hit during development, their actual root causes (not just the
-symptom), and how they were fixed or worked around. Written so the same
-mistake isn't repeated, and so a fix is applied at the real cause rather
-than papered over at the symptom.
+Real problems met while building and testing this platform, with their **actual root causes**, how each was fixed, and the lesson. Entries are grouped by area. Each says what is proven and, where it applies, what is still unknown. Architecture is in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Contents
+
+1. [Database and Supabase](#1-database-and-supabase)
+2. [Authentication and onboarding](#2-authentication-and-onboarding)
+3. [Catalog, cart and orders](#3-catalog-cart-and-orders)
+4. [Payments and webhooks](#4-payments-and-webhooks)
+5. [Email](#5-email)
+6. [Tooling and process](#6-tooling-and-process)
 
 ---
 
-## 1. `permission denied for table X` despite a correct, enabled RLS policy
+## 1. Database and Supabase
 
-**Symptom**: A table had RLS enabled and a policy that should have
-permitted the query (confirmed correct by reading it), but queries from
-the browser/anon or authenticated client still failed with
-`permission denied for table X`.
+### 1.1 `permission denied for table X` despite a correct RLS policy
 
-**Root cause**: Postgres checks two independent things before a query
-succeeds — a table-level `GRANT` for the requesting role, and (only if
-that passes) whatever RLS policies apply. Supabase's dashboard/Studio
-table editor applies default `GRANT SELECT/INSERT/UPDATE/DELETE` to the
-`anon` and `authenticated` roles automatically whenever a table is created
-through it. **Tables created via the Supabase CLI migration workflow do
-not get this automatic grant.** Every table in this project was created
-via CLI migrations, so this gap applied everywhere by default.
+- **Symptom:** a table with RLS enabled and a correct policy still failed with `permission denied`.
+- **Root cause:** Postgres checks the table-level `GRANT` for the role first and evaluates policies only if that passes. Tables created by Supabase CLI migrations in this project did not receive automatic grants. The same gap appeared for `products` and `categories`, for `profiles` (both reads and the service role's writes), and was then closed pre-emptively for the cart, order and storage tables.
+- **Fix:** pair every policy with an explicit `GRANT` migration, and verify both independently: `pg_policies` for the policy, `information_schema.role_table_grants` for the grant.
+- **Lesson:** a verified policy is not evidence that access works.
 
-This was hit independently at least three times before the pattern was
-understood: `products`/`categories` (public catalog access, Checkpoint 3),
-`profiles` (Checkpoint 4, twice — once for `SELECT`, once for the
-`service_role`'s own `INSERT`/`SELECT` needed by the admin seed script),
-and pre-emptively addressed for `cart_items`/`orders`/`order_items`/
-`order_status_history`/`storage.objects` once the pattern was known
-(Checkpoint 5).
+### 1.2 `order_items` insert failed: `gst_percent` does not exist
 
-**Fix**: Every RLS policy must be paired with an explicit `GRANT`
-migration for the same table/role combination. Verify both independently
-— `select * from pg_policies where tablename = 'x'` proves the policy
-exists; `select grantee, privilege_type from
-information_schema.role_table_grants where table_schema = 'public' and
-table_name = 'x'` proves the grant exists. Checking only the policy is
-not sufficient evidence that access actually works.
+- **Symptom:** the first real checkout would have failed with "column does not exist" (caught in an audit before any real order).
+- **Root cause:** the insert assumed a column that was never in the schema. Earlier checks were arithmetic and standalone calculations, never an actual insert.
+- **Fix:** remove the field. Confirmed with a real end-to-end order.
+- **Lesson:** a correct calculation and a successful insert are different claims. The same pattern caused 1.3.
 
----
+### 1.3 Admin order pages crashed: `profiles.email` does not exist
 
-## 2. Invite email link never establishes a session
+- **Root cause:** another unverified schema assumption. Email lives only in `auth.users`.
+- **Fix:** fetch it with `auth.admin.getUserById`.
 
-**Symptom**: Using `supabase.auth.admin.inviteUserByEmail()` for trade
-account approval would (if it were fully wired up) send an email whose
-link, when clicked, would not log the user in.
+### 1.4 Product with no SAP code: two products shared one
 
-**Root cause**: Supabase's default invite email delivers tokens using the
-**implicit flow** — `access_token` etc. appended to the URL as a hash
-fragment (`#access_token=...`), which never reaches the server (hash
-fragments are client-only). `@supabase/ssr`'s `createBrowserClient`
-defaults to the **PKCE flow**, which expects a `?code=` query parameter
-instead. These are fundamentally incompatible; the link would silently
-fail to set a session.
+- **What happened:** the Axera Trion price list gave "TELMICLAR AM TAB 40/5MG,15'S" and "TELMICLAR TAB 40MG,15'S" the same SAP code. `sap_code` is unique, so both could not be stored.
+- **Resolution:** the second product was imported with `sap_code = NULL` rather than an invented code. This is a source-data error. **Still open:** Florus must supply the correct code.
 
-**Fix**: Use `supabase.auth.admin.generateLink({ type: 'invite', email })`
-instead — it returns a `hashed_token` directly to server code rather than
-sending an email. Build a confirmation URL as
-`{SITE_URL}/auth/confirm?token_hash=...&type=invite&next=...` and handle
-it with a route handler that calls `supabase.auth.verifyOtp({ type,
-token_hash })` via the cookie-based server client, which sets the session
-through cookies server-side — no hash-fragment parsing, no flow mismatch.
-Since this project doesn't have custom SMTP configured (Supabase's default
-email sender locks template editing without it), the resulting link is
-shown directly to the admin to relay manually rather than emailed — see
-`ARCHITECTURE.md`.
+### 1.5 Deleting an uploaded file with SQL does not delete it
+
+- **Root cause:** `storage.objects` is metadata. Deleting a row does not remove the object from the storage backend, and the two drift apart.
+- **Fix:** always use the Storage API (`storage.from(bucket).remove([...])`).
+
+### 1.6 Brand-new database cannot be built in one step
+
+- **Root cause:** the full-catalog migration selects category IDs, but categories are seeded by `supabase/seed.sql`, which `db push` does not run. The production database grew incrementally, which hid this.
+- **Status:** documented in the README with a workaround that has not been exercised end to end. The real fix is to seed categories in a migration.
+
+### 1.7 The legacy-versus-new Supabase key names
+
+- The project uses `sb_publishable_…` and `sb_secret_…` keys. The secret's variable is exactly `SUPABASE_SECRET_KEY`. Scripts copied from generic examples used `SUPABASE_SERVICE_ROLE_KEY` and failed.
+
+### 1.8 `listUsers()` silently checks only the first 50 users
+
+- **Symptom (latent):** the password-reset flow decided whether an account exists with `auth.admin.listUsers()` and `.some()`. Supabase's documentation confirms `listUsers` returns 50 users per page by default, so users beyond page one would never get a reset email.
+- **Fix:** use the existing `check_auth_email_exists` function instead.
+- **Lesson:** never answer an existence question by scanning a paginated list.
+
+### 1.9 Email lookup is case-sensitive
+
+- **Proven by test:** `check_auth_email_exists('doctor@florus.in')` returns true and `'DOCTOR@FLORUS.IN'` returns false.
+- **Consequence:** registering `Doctor@florus.in` bypassed the duplicate-account check.
+- **Fix:** registration trims and lowercases email before every use; password reset retries once with a lowercased address.
 
 ---
 
-## 3. `order_items` insert fails — `gst_percent` column doesn't exist
+## 2. Authentication and onboarding
 
-**Symptom**: The very first real order submission would have failed with
-a "column does not exist" error (caught before it ever reached a real
-user, during a deliberate audit against the actual schema).
+### 2.1 Invite links never established a session
 
-**Root cause**: The checkout Server Action's order-items insert included
-a `gst_percent` field, based on an assumption about the schema that was
-never actually checked against the real migration. `order_items` has no
-such column — only `id, order_id, product_id, quantity,
-unit_price_ex_gst_snapshot`. This went undetected for an entire
-development session because every verification up to that point was
-either a standalone pricing-calculation script or arithmetic reasoning —
-never an actual database insert.
+- **Root cause:** Supabase's default invite email uses the implicit flow, putting tokens in the URL hash, which the server never sees. The project's `@supabase/ssr` browser client uses PKCE, which expects a `?code=` parameter. The two are incompatible.
+- **Fix:** `auth.admin.generateLink({ type: 'invite' })` returns a hashed token to server code. The invite URL points to `/auth/confirm?token_hash=…&type=invite&next=…`, a route handler that calls `verifyOtp` through the cookie-based client, which sets the session. Supabase's default mailer cannot edit templates without custom SMTP, so the link is emailed through Resend.
 
-**Fix**: Removed the field. Confirmed by creating a real order end-to-end
-and inspecting the real returned `order_items` row.
+### 2.2 Redirecting signed-in users away from set-password broke the real invite flow
 
-**Lesson**: A calculation being logically correct and a database insert
-succeeding are different claims. Neither should be accepted as evidence
-for the other.
+- **Symptom:** after a "harden auth" change, clicking a genuine invite link bounced the applicant away.
+- **Root cause:** the invite click creates a session, and the trade profile already exists at approval time. "Has a session and a trade profile" therefore did not mean "has finished onboarding".
+- **Fix:** an explicit `profiles.password_set` flag, default false, set when the password is chosen. Page and action gates use it.
+- **Lesson:** model state explicitly instead of inferring it from other facts.
 
----
+### 2.3 Recovery links for existing accounts landed on the dashboard
 
-## 4. Admin order pages crash — `profiles.email` doesn't exist
+- **Root cause:** a working account already has `password_set = true`, so the set-password page redirected a valid recovery session away.
+- **Fix:** `/auth/confirm` adds `?flow=recovery` for recovery tokens; the set-password page shows the form when that flag and a session are both present. A signed-in user can reach the form by visiting that URL, which is accepted.
 
-**Symptom**: Same failure class as #3, same root cause pattern
-(unverified schema assumption), different table. `/admin/orders` and
-`/admin/orders/[id]` both selected `email` from a `profiles` join.
+### 2.4 A helper silently returned nothing for a locked-down table
 
-**Root cause**: `profiles` has no `email` column — email lives only on
-Supabase's `auth.users`, which was never duplicated into `profiles` by
-design (see `ARCHITECTURE.md`). This also went undetected until a real
-query was run against the real schema, not just read from the code.
+- **Symptom:** the registration-detail lookup returned null for every user.
+- **Root cause:** it used the RLS-bound client against `trade_applications`, which deliberately has no grants for `anon` or `authenticated`. The query was denied and the helper treated the error as "no data".
+- **Fix:** use the admin client in that one helper, which is only ever called with a verified session's user ID.
 
-**Fix**: Fetch email separately via `adminClient.auth.admin.getUserById
-(order.user_id)` rather than joining it from `profiles`.
+### 2.5 Application approve and reject trusted the caller
 
----
+- **Symptom (found in review, not by a user report):** the two application actions took `adminUserId` from the submitted form and never verified the caller was an admin, while using the service-role client. Approval returns a live invite URL.
+- **Fix:** both actions call `requireRole('admin')` first and use the session user as the reviewer. The client no longer sends an ID.
+- **Lesson:** a Server Action is a public endpoint. Page-level checks do not protect it; each action needs its own check. Audit every exported action for its gate.
 
-## 5. Order-level GST silently hardcoded at 5%
+### 2.6 A reset showed "Failed to set password" for reusing the old password
 
-**Symptom**: None visible during normal testing — every real seeded
-product happens to carry `gst_percent = 5.00`, so a hardcoded `5%`
-calculation and the "sum each line's real GST" calculation produced
-identical numbers.
+- **Root cause:** Supabase rejected the update with code `same_password`; the action mapped every error to one generic message.
+- **Fix:** that code now returns "Your new password must be different from your current password."
 
-**Root cause**: `submitOrderAction` computed the order's total
-`gst_amount` as `subtotalExGst × 0.05`, discarding a per-line GST value
-it had already correctly computed earlier in the same function using each
-product's own `gst_percent`. Because every product in the seeded data
-shares the same rate, this bug was invisible to any test that didn't
-deliberately introduce a product with a different rate.
+### 2.7 Contact form crashed after submit
 
-**Fix**: Accumulate the real per-line GST values (already computed
-correctly) into a running total instead of recomputing from a fixed rate.
-Verified by temporarily adding a test product at 18% GST alongside a real
-5% product, submitting a real order, and confirming the stored
-`gst_amount` matched the true sum, not a 5%-of-everything calculation.
-
-**Lesson**: A bug that only manifests with input data the current dataset
-doesn't happen to contain is still a real bug — test with a deliberately
-different case, not just the happy path the current data provides.
+- **Root cause:** `e.currentTarget` is null after an `await`. The form reference must be captured synchronously.
 
 ---
 
-## 6. `TELMICLAR AM` / `TELMICLAR TAB` share one SAP code
+## 3. Catalog, cart and orders
 
-**Symptom**: The Axera Trion source price list lists two genuinely
-different products — "TELMICLAR AM TAB 40/5MG,15'S" and "TELMICLAR TAB
-40MG,15'S" — both under SAP code `5602597`.
+### 3.1 Order GST was silently fixed at 5%
 
-**Root cause**: This is an error in Florus's own source document, not a
-transcription or import bug. `products.sap_code` has a `UNIQUE`
-constraint, so both rows cannot share the code.
+- **Root cause:** the order's total GST was computed as 5% of the subtotal, discarding the correct per-line GST already computed. Every product happened to be 5%, so nothing looked wrong.
+- **Fix:** sum the per-line GST. Verified by temporarily adding an 18% product to a real order.
+- **Lesson:** a bug that only appears with data the dataset does not contain is still a bug. Test a deliberately different case.
 
-**Fix**: "TELMICLAR TAB 40MG,15'S" was imported with `sap_code = NULL`
-rather than inventing a plausible-looking but fabricated code. This is
-flagged in the full-catalog-import migration's own comments and in
-`README.md`'s "Known Open Items" — Florus needs to supply the correct,
-distinct SAP code.
+### 3.2 Cart quantity edits never saved
+
+- **Symptom:** changing a quantity updated the row on screen, but the total stayed, and a refresh restored the old value. No network request was made.
+- **Root cause:** the input's change handler updated the quantity state on every keystroke, and the blur handler then compared the typed value to that same state ("did it change?"). It was always equal, so it returned before calling the server. The failure-revert path restored the already-changed value, so it could not revert anything.
+- **History:** present since the commit that introduced the cart (Checkpoint 5). An earlier progress entry claimed quantity editing was verified in a browser; that claim was wrong.
+- **Fix:** keep the last saved quantity separate from the text in the input; save on blur or Enter; revert to the saved value on any failure.
+- **Lesson:** "verified" must name the evidence. A claim without a recorded observation is a guess.
+
+### 3.3 "Add to Cart" replaced the quantity
+
+- **Root cause:** the upsert overwrote the existing quantity while a comment claimed it incremented. Adding 5 and then 3 left 3.
+- **Fix:** read the current quantity, add, and cap the total at 9,999 with a clear error.
 
 ---
 
-## 7. `tsx` scripts silently fail to read `.env.local`
+## 4. Payments and webhooks
 
-**Symptom**: One-off verification scripts run via `npx tsx scripts/
-whatever.ts` would fail with "missing environment variable" even though
-`.env.local` clearly had the value.
+### 4.1 Refund alerts went to nobody
 
-**Root cause**: `tsx` does not auto-load `.env.local` the way `next dev`
-does. Scripts that import anything reading `process.env` (like
-`createAdminClient()`) need `dotenv` loaded explicitly, and — because of
-ES module import hoisting, static imports execute before any other
-top-level code in the same module regardless of source order — the
-`dotenv.config()` call must happen via an import that's guaranteed to run
-first, or via a dynamic `await import()` after `config()`, not just placed
-textually above other imports.
+- **Root cause:** the code read `process.env.ADMIN_EMAILS`, a variable that does not exist; the recipients are a constant exported from `admin-recipients.ts`. Sending to an undefined address silently did nothing.
+- **Fix:** use the constant. Proven when a real refund failure produced the alert email.
 
-**Fix**: Every ad hoc script starts with:
+### 4.2 One refund failed with Razorpay `BAD_REQUEST_ERROR`
+
+- **Facts:** the amount was a number and the paise value (527258) was correct. The identical retry succeeded.
+- **Cause: unknown.** Diagnostics were added, showed nothing wrong, and were removed. One failure in total. Monitor; if it recurs, escalate to Razorpay support with the request details.
+
+### 4.3 Test webhooks cannot reach localhost, and test-mode visibility is poor
+
+- Webhooks are registered per Razorpay account and mode. A webhook pointing at the production URL never receives events from a local server, but it **does** receive events for locally created test payments, because those are account events.
+- Because local and production share a Supabase project, the production endpoint updates locally created orders. This is how the `refunded` transition was verified.
+- The Razorpay test dashboard showed no delivery history. Vercel Hobby runtime logs last only briefly. Plan production tests so the evidence can be read promptly.
+- Razorpay's documented behavior: non-2xx responses are retried with backoff for 24 hours, a webhook that keeps failing is disabled, and failed events can be replayed for 15 days.
+
+### 4.3.1 Webhook route checklist
+
+- Invalid or missing signature returns 400 (both verified against production). A missing secret would return 500, so a 400 on a bogus signature also proves the secret is configured.
+
+### 4.4 "Pay Online" appeared on production with no Razorpay keys
+
+- **Root cause:** the option rendered unconditionally while production deliberately has no API keys (account activation pending, and test keys must not run on the live site).
+- **Fix:** one availability gate used by the page and both server actions; production builds additionally require a `rzp_live_` key.
+- **Process note:** the first verification script failed because assigning `undefined` to `process.env.X` stores the string `"undefined"`. Delete the variable instead.
+
+### 4.5 False "Orphaned Payment" alert for a payment that had an order
+
+- **Cause (proven by the alert existing):** `payment.captured` can arrive before the checkout action inserts the order, so the webhook found no order and alerted.
+- **Fix:** a grace window. The handler returns 200 at once and a background task re-checks every 5 seconds for about 40 seconds before alerting. The alert text tells admins to check first.
+- **Verified:** a signed fake event with no order produced exactly one alert about 45 seconds later; a real paid order produced none.
+- **Limits:** the window is a heuristic. A slower upload could still alert.
+
+### 4.6 Alert email arrived late
+
+- **Observation:** the first false alert arrived about two minutes after the order email.
+- **Hypothesis (not proven):** the email send was not awaited, and on serverless an unawaited promise can be paused after the response returns. Logs from that run had expired, so this could not be confirmed.
+- **Fix regardless:** awaited sends, and background work through `after()`. The grace-window test showed such work completing well after the response.
+
+---
+
+## 5. Email
+
+- **Email links must not point at localhost.** A mail provider flagged localhost links. `NEXT_PUBLIC_SITE_URL` must be the production URL in Vercel and is inlined at build time, so it needs a redeploy.
+- **Not delivered is not always a bug.** One order-fulfilled email showed "Sent" but not "Delivered" once; the next send delivered.
+
+---
+
+## 6. Tooling and process
+
+### 6.1 Scripts run with `tsx` do not load `.env.local`
+
+`tsx` does not auto-load it. Because static imports are hoisted, `dotenv.config()` must run before the module that reads the environment is imported (or the import must be dynamic):
+
 ```typescript
 import { config } from 'dotenv';
 import { resolve } from 'path';
@@ -176,75 +196,24 @@ config({ path: resolve(process.cwd(), '.env.local') });
 import { createAdminClient } from '../src/utils/supabase/admin'; // after config()
 ```
 
----
+### 6.2 Supabase CLI interactive commands and coding-agent terminals
 
-## 8. Supabase CLI interactive output doesn't reliably stream back through the coding agent
+`db push`, `migration new` and `login` prompt interactively and often appear hung in an agent's terminal. One `migration new` ran twice and created two migration files. Run interactive CLI commands in a real terminal, then confirm exactly one migration file exists per change.
 
-**Symptom**: Commands like `npx supabase db push`, `npx supabase
-migration new`, and `npx supabase login` (all of which prompt for
-interactive confirmation) would frequently appear to hang or produce no
-output when run through the coding agent's terminal tool on Windows, even
-though the command had actually completed successfully.
+### 6.3 `supabase db query` and `db execute` target local Docker
 
-**Root cause**: A terminal-output-capture quirk specific to the
-interactive-prompt + Windows PowerShell + coding-agent-tool combination —
-not a real failure of the underlying command.
+They cannot reach the hosted database. Run verification SQL in the Supabase SQL editor.
 
-**Fix**: Never assume success or failure from an apparently-hung or
-empty tool result for these specific commands. Have a human check the
-real terminal window and paste back the actual output before proceeding
-either direction.
+### 6.4 Windows PowerShell
 
----
+`&&` is not a valid separator; run commands separately. Paths with `[brackets]` need `-LiteralPath`. `Invoke-WebRequest` prompts about script parsing unless `-UseBasicParsing` is used.
 
-## 9. Deleting a Storage "file" via raw SQL doesn't delete the file
+### 6.5 Process lessons from working with an AI coding agent
 
-**Symptom**: `delete from storage.objects where ...` appeared to remove a
-row but the underlying uploaded file/bytes were not actually gone from
-the storage backend, and the Supabase dashboard could still show
-inconsistent state afterward.
-
-**Root cause**: `storage.objects` is Postgres's metadata table for
-Storage — deleting a row there doesn't invoke Storage's own deletion path
-against the actual object bytes in the backend, so raw SQL manipulation
-and the real file lifecycle can drift apart.
-
-**Fix**: Always use the Storage API's own methods
-(`supabase.storage.from(bucket).remove([paths])`) for anything that needs
-to actually delete a file, never raw SQL against `storage.objects`
-directly.
-
----
-
-## 10. Any credential printed to chat/terminal output is burned
-
-**Applies generally, hit concretely at least once**: a generated admin
-password appeared in a coding agent's response text (intended only to be
-shown to the human in the terminal). Once any real secret has been
-printed anywhere outside a private terminal a human controls — even
-transiently, even in a tool that's "just for review" — treat it as
-compromised and rotate it immediately. Don't reason about whether it was
-"probably fine."
-
----
-
-## 11. Legacy vs. current Supabase API key naming
-
-This project uses Supabase's current key format (`sb_publishable_...` /
-`sb_secret_...`), not the legacy `anon` / `service_role` JWTs. The
-project's own env var is named `SUPABASE_SECRET_KEY`. Several early
-ad hoc scripts assumed the older `SUPABASE_SERVICE_ROLE_KEY` name (copied
-from generic examples/muscle memory) and failed until corrected — watch
-for this specifically if writing any new script from scratch rather than
-copying `scripts/seed-admin.ts`'s existing, correct pattern.
-
----
-
-## 12. GRPPL Critical Care Franchisee sheet is 100% duplicate data
-
-Not a bug, but worth recording so nobody re-imports it later or wonders
-why it's absent: every SAP code on Florus's "GRPPL Critical Care
-Franchisee" price sheet (4 products) is a verbatim duplicate of a row
-already present on the separate "GRPPL Franchisee" sheet. It contributed
-zero new products to the catalog import — confirmed by cross-checking SAP
-codes across both documents before writing the import.
+- **Claims need evidence.** "Build passed" and "should work" are not verification. Evidence is terminal output, database rows, a diff, or an executed test.
+- **Watch for downgraded tests,** such as "will verify in the browser" next to a checked box.
+- **Do not let the agent write documentation.** It fabricated plausible progress entries twice (one was committed and then reverted). Documentation is written by hand from verified facts; the standing rules are in `AGENTS.md`.
+- **Separate proven facts from guesses.** "Transient Razorpay issue" and "possibly rate limiting" were guesses stated as facts. Write "cause unknown" when it is.
+- **Never print a secret.** Any credential that appears in chat, logs or terminal output you do not control is compromised; rotate it. (This happened once with a generated admin password.) Secrets go to `.env.local` or the host's settings directly.
+- **Review every diff before committing,** confirm `.env.local` never appears, and confirm the pushed commit with `git log --oneline -3`.
+- **Verify live facts about external services** (Razorpay, Vercel, Supabase) from their documentation before depending on them, and say what was and was not verified.
