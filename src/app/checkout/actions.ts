@@ -48,14 +48,21 @@ export async function submitOrderAction(formData: FormData) {
       return { success: false, error: 'Missing payment verification data' };
     }
 
-    // Verify Razorpay signature
+    // Verify Razorpay signature using constant-time comparison
     const crypto = await import('crypto');
     const expectedSignature = crypto
       .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
       .update(`${razorpayOrderId}|${razorpayPaymentId}`)
       .digest('hex');
 
-    if (expectedSignature !== razorpaySignature) {
+    // Use timingSafeEqual to prevent timing attacks
+    const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+    const receivedBuffer = Buffer.from(razorpaySignature, 'hex');
+
+    if (
+      expectedBuffer.length !== receivedBuffer.length ||
+      !crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
+    ) {
       console.error('SECURITY: Razorpay signature verification failed', {
         razorpayOrderId,
         razorpayPaymentId,
@@ -83,6 +90,31 @@ export async function submitOrderAction(formData: FormData) {
 
   const { totals, cartItems } = cartResult;
   const { subtotalExGst, gstAmount, totalInclGst, orderItems } = totals;
+
+  // If online payment, verify payment details with Razorpay BEFORE uploading PO
+  if (paymentMethod === 'online') {
+    const { verifyRazorpayPayment } = await import('@/utils/razorpay/verify-payment');
+    
+    const verificationResult = await verifyRazorpayPayment({
+      razorpayPaymentId: razorpayPaymentId!,
+      razorpayOrderId: razorpayOrderId!,
+      expectedAmountPaise: Math.round(totalInclGst * 100),
+      userId,
+    });
+
+    if (!verificationResult.success) {
+      console.error('SECURITY: Payment verification failed', {
+        razorpayOrderId,
+        razorpayPaymentId,
+        userId,
+        error: verificationResult.error,
+      });
+      return {
+        success: false,
+        error: `Payment verification failed: ${verificationResult.error}`,
+      };
+    }
+  }
 
   // 5. Upload PO file to storage
   const timestamp = Date.now();
@@ -131,6 +163,18 @@ export async function submitOrderAction(formData: FormData) {
 
     if (orderError || !order) {
       console.error('Failed to create order:', orderError);
+      
+      // Check for unique constraint violation (duplicate payment ID)
+      if (orderError?.code === '23505') {
+        // Delete the uploaded PO file since order creation failed
+        await supabase.storage.from('po-uploads').remove([storagePath]);
+        
+        return {
+          success: false,
+          error: 'This payment has already been used for another order. Please contact support if you believe this is an error.',
+        };
+      }
+      
       // Orphaned file - log for manual cleanup
       console.error(`Orphaned PO file at: ${storagePath}`);
       return {

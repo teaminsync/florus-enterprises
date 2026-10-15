@@ -12,7 +12,6 @@ Dates come from migration timestamps, commits and deployment records. Entries ma
 
 ## Planned before go-live
 
-- Harden payment verification before online payment is enabled.
 - Seed categories in a migration so a new database builds in one step.
 - Razorpay account activation, live keys and a live webhook (steps in the README).
 - Florus to supply the missing SAP code for TELMICLAR TAB 40MG,15'S.
@@ -151,3 +150,9 @@ Dates come from migration timestamps, commits and deployment records. Entries ma
 
 ### Documentation rewrite · Oct 14, 2026
 - README, ARCHITECTURE, TROUBLESHOOTING and PROGRESS rewritten as consolidated documents, with a proprietary-software notice in the README.
+
+### Checkpoint 34 — Payment verification hardened · Oct 15, 2026
+- Payment verification added before order creation: amount, status, ownership and uniqueness all checked against Razorpay. Payment signature comparison now uses `crypto.timingSafeEqual` (constant-time). Unique partial indexes prevent payment ID reuse. Duplicate payment use returns a clear error and deletes the uploaded PO.
+- Verification retries up to 4 times (1 second apart) if payment status is not `captured` yet.
+- Files: `verify-payment.ts` created, `actions.ts` updated with verification call and 23505 handling, migration adds unique indexes on `razorpay_payment_id` and `razorpay_order_id`.
+- Verified: build passes. Test script confirmed Razorpay API returns `amount` as number (paise), `payment.captured` as boolean, and `order.notes.userId` as string.
