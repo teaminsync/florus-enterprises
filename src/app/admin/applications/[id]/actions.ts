@@ -1,15 +1,17 @@
 'use server';
 
+import { requireRole } from '@/utils/auth/require-role';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { sendEmail } from '@/utils/email/send';
 import { tradeApplicationApprovedEmail, tradeApplicationRejectedEmail } from '@/utils/email/templates';
 
 export async function approveApplicationAction(formData: FormData) {
+  const { user } = await requireRole('admin');
+  
   const applicationId = formData.get('applicationId') as string;
-  const adminUserId = formData.get('adminUserId') as string;
 
-  if (!applicationId || !adminUserId) {
-    return { success: false, error: 'Missing application ID or admin user ID.' };
+  if (!applicationId) {
+    return { success: false, error: 'Missing application ID.' };
   }
 
   const adminClient = createAdminClient();
@@ -64,7 +66,7 @@ export async function approveApplicationAction(formData: FormData) {
         .from('trade_applications')
         .update({
           admin_notes: `User created (${data.user.id}) but profile creation failed. Manual intervention required.`,
-          reviewed_by: adminUserId,
+          reviewed_by: user.id,
           reviewed_at: new Date().toISOString(),
         })
         .eq('id', applicationId);
@@ -78,7 +80,7 @@ export async function approveApplicationAction(formData: FormData) {
       .update({
         status: 'approved',
         linked_profile_id: data.user.id,
-        reviewed_by: adminUserId,
+        reviewed_by: user.id,
         reviewed_at: new Date().toISOString(),
         admin_notes: `Approved. User ID: ${data.user.id}. Invite link generated for manual relay.`,
       })
@@ -112,12 +114,13 @@ export async function approveApplicationAction(formData: FormData) {
 }
 
 export async function rejectApplicationAction(formData: FormData) {
+  const { user } = await requireRole('admin');
+  
   const applicationId = formData.get('applicationId') as string;
-  const adminUserId = formData.get('adminUserId') as string;
   const rejectionReason = formData.get('rejectionReason') as string;
 
-  if (!applicationId || !adminUserId) {
-    return { success: false, error: 'Missing application ID or admin user ID.' };
+  if (!applicationId) {
+    return { success: false, error: 'Missing application ID.' };
   }
 
   if (!rejectionReason || rejectionReason.trim() === '') {
@@ -148,7 +151,7 @@ export async function rejectApplicationAction(formData: FormData) {
       .update({
         status: 'rejected',
         rejection_reason: rejectionReason.trim(),
-        reviewed_by: adminUserId,
+        reviewed_by: user.id,
         reviewed_at: new Date().toISOString(),
       })
       .eq('id', applicationId);

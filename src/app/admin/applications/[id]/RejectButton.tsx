@@ -5,10 +5,9 @@ import { rejectApplicationAction } from './actions';
 
 interface RejectButtonProps {
   applicationId: string;
-  adminUserId: string;
 }
 
-export function RejectButton({ applicationId, adminUserId }: RejectButtonProps) {
+export function RejectButton({ applicationId }: RejectButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showReasonForm, setShowReasonForm] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -38,7 +37,6 @@ export function RejectButton({ applicationId, adminUserId }: RejectButtonProps) 
     try {
       const formData = new FormData();
       formData.append('applicationId', applicationId);
-      formData.append('adminUserId', adminUserId);
       formData.append('rejectionReason', rejectionReason);
 
       const result = await rejectApplicationAction(formData);

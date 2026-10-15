@@ -5,10 +5,9 @@ import { approveApplicationAction } from './actions';
 
 interface ApproveButtonProps {
   applicationId: string;
-  adminUserId: string;
 }
 
-export function ApproveButton({ applicationId, adminUserId }: ApproveButtonProps) {
+export function ApproveButton({ applicationId }: ApproveButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +20,6 @@ export function ApproveButton({ applicationId, adminUserId }: ApproveButtonProps
     try {
       const formData = new FormData();
       formData.append('applicationId', applicationId);
-      formData.append('adminUserId', adminUserId);
       
       const result = await approveApplicationAction(formData);
       

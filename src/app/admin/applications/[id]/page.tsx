@@ -11,7 +11,7 @@ export default async function ApplicationDetailPage(props: { params: Params }) {
   const params = await props.params;
   
   // Require admin role
-  const { user: adminUser } = await requireRole('admin');
+  await requireRole('admin');
 
   // Get application details using admin client
   const adminClient = createAdminClient();
@@ -161,14 +161,12 @@ export default async function ApplicationDetailPage(props: { params: Params }) {
             <div className="flex-1">
               <ApproveButton 
                 applicationId={application.id}
-                adminUserId={adminUser.id}
               />
             </div>
 
             <div className="flex-1">
               <RejectButton 
                 applicationId={application.id}
-                adminUserId={adminUser.id}
               />
             </div>
           </div>
