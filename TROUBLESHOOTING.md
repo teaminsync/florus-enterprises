@@ -65,6 +65,12 @@ Real problems met while building and testing this platform, with their **actual 
 - **Consequence:** registering `Doctor@florus.in` bypassed the duplicate-account check.
 - **Fix:** registration trims and lowercases email before every use; password reset retries once with a lowercased address.
 
+### 1.10 The reset script leaves pending and rejected applications behind
+
+- **Symptom:** after a reset, the verification step reported 5 applications where 4 (the demo accounts) were expected.
+- **Root cause:** the script deletes applications whose `linked_profile_id` is `NOT IN` the preserved IDs. In SQL, `NULL NOT IN (...)` is never true, and pending or rejected applications have no linked profile, so they are never deleted. The script's "Deleted N" lines are also unreliable, because the delete calls do not request a count and the script prints 0.
+- **Status:** open. Workaround: delete the leftover rows in the SQL editor; trust the verification counts. A fix (choose rows to delete in code, delete by ID, request real counts) is planned.
+
 ---
 
 ## 2. Authentication and onboarding
@@ -174,6 +180,19 @@ Real problems met while building and testing this platform, with their **actual 
 - **Hypothesis (not proven):** the email send was not awaited, and on serverless an unawaited promise can be paused after the response returns. Logs from that run had expired, so this could not be confirmed.
 - **Fix regardless:** awaited sends, and background work through `after()`. The grace-window test showed such work completing well after the response.
 
+### 4.7 An online payment was not tied to the order it paid for
+
+- **Found in review, not by a user report:** checkout verified only Razorpay's signature.
+- **Root cause:** the signature proves that an order ID and payment ID are a genuine pair. It does not prove the amount equals the cart, nor that the payment has not been used before. Someone could pay for a small cart, fill the cart with more items, and submit the same payment, getting a larger order marked as paid; the same payment could also back several orders.
+- **Fix:** the server asks Razorpay for the payment and its order and requires captured status, the matching Razorpay order, INR, the exact cart total in paise, and the same user. Unique indexes on the payment and order IDs allow one order per payment. The signature is compared in constant time.
+- **Verified:** a duplicate insert was refused with `23505`. A normal paid order still worked end to end. A payment made after the cart changed was refused with no order created, and the orphaned-payment alert followed.
+- **Lesson:** verifying that a message is authentic is not the same as verifying that it means what the order needs. Check the amount and the one-time use.
+
+### 4.8 A refunded payment still reports `captured: true`
+
+- **Observed against Razorpay's API:** a fully refunded test payment returned `status: refunded` while `captured` stayed `true`. Amounts come back as numbers in paise.
+- **Consequence:** verification must check `status`, not just the boolean. A refunded payment then fails the "captured" requirement.
+
 ---
 
 ## 5. Email
@@ -212,7 +231,7 @@ They cannot reach the hosted database. Run verification SQL in the Supabase SQL 
 
 - **Claims need evidence.** "Build passed" and "should work" are not verification. Evidence is terminal output, database rows, a diff, or an executed test.
 - **Watch for downgraded tests,** such as "will verify in the browser" next to a checked box.
-- **Do not let the agent write documentation.** It fabricated plausible progress entries twice (one was committed and then reverted). Documentation is written by hand from verified facts; the standing rules are in `AGENTS.md`.
+- **Do not let the agent write documentation.** It fabricated plausible progress entries twice (one was committed and then reverted), and later edited a documentation file again against explicit instructions. Documentation is written by hand from verified facts; the standing rules are in `AGENTS.md`. Check `git status` and the full diff before every commit, because an unrequested file can slip in.
 - **Separate proven facts from guesses.** "Transient Razorpay issue" and "possibly rate limiting" were guesses stated as facts. Write "cause unknown" when it is.
 - **Never print a secret.** Any credential that appears in chat, logs or terminal output you do not control is compromised; rotate it. (This happened once with a generated admin password.) Secrets go to `.env.local` or the host's settings directly.
 - **Review every diff before committing,** confirm `.env.local` never appears, and confirm the pushed commit with `git log --oneline -3`.

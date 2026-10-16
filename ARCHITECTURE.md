@@ -51,7 +51,7 @@ All tables are in `public` with UUID primary keys, created by the migrations in 
 | `profiles` | `id` = `auth.users.id`; `role` (`trade` or `admin`), `account_type` (`doctor`, `pharmacy`, `retailer`, `hospital`), `full_name`, `phone`, `is_active`, `password_set` |
 | `trade_applications` | Applicant type and details, `status` (`pending`, `approved`, `rejected`), `rejection_reason`, `admin_notes`, `reviewed_by`, `reviewed_at`, `linked_profile_id`, plus `registration_number`, `licence_number`, `gst_number`, `authorized_signatory` per applicant type |
 | `cart_items` | `user_id`, `product_id`, `quantity`; unique on (`user_id`, `product_id`) |
-| `orders` | `user_id`, `status`, PO path and filename, `admin_feedback`, `subtotal_ex_gst`, `gst_amount`, `total_incl_gst`, `payment_method` (`cod` or `online`), `razorpay_order_id`, `razorpay_payment_id`, `payment_status` (`captured`, `refund_initiated`, `refunded`, `refund_failed`; null for COD), `razorpay_refund_id` |
+| `orders` | `user_id`, `status`, PO path and filename, `admin_feedback`, `subtotal_ex_gst`, `gst_amount`, `total_incl_gst`, `payment_method` (`cod` or `online`), `razorpay_order_id`, `razorpay_payment_id`, `payment_status` (`captured`, `refund_initiated`, `refunded`, `refund_failed`; null for COD), `razorpay_refund_id`. Unique indexes on `razorpay_payment_id` and `razorpay_order_id` (where present) allow one order per payment |
 | `order_items` | `order_id`, `product_id`, `quantity`, `unit_price_ex_gst_snapshot`. There is **no** `gst_percent` column |
 | `order_status_history` | One row per transition: `status`, `note`, `changed_by` (always a real profile ID), `changed_at` |
 
@@ -187,8 +187,9 @@ pending_verification ─► approved ─► fulfilled
 2. `createRazorpayOrderAction`: availability gate → account gate → server-side cart total → Razorpay order for that amount in paise (`INR`, `notes.userId`). It returns the order ID, amount and public key ID.
 3. The browser loads Razorpay Checkout dynamically and opens the modal.
 4. On success the browser calls `submitOrderAction` with the PO file and Razorpay's order ID, payment ID and signature.
-5. The server validates the method, the availability gate and the account, verifies the HMAC-SHA256 signature of `order_id|payment_id` with the API secret, recomputes the cart total, uploads the PO, and inserts the order (`payment_status = captured`), items and history. It then clears the cart and sends emails.
+5. The server validates the method, the availability gate and the account, and verifies the HMAC-SHA256 signature of `order_id|payment_id` with the API secret using a constant-time comparison. It recomputes the cart total, then **asks Razorpay** for the payment and its order and requires all of: payment `captured` (briefly retried if not yet), belonging to that Razorpay order, in INR, for exactly the cart total in paise, and a Razorpay order created for this same user. Only then does it upload the PO and insert the order (`payment_status = captured`), items and history, clear the cart and send emails. A refunded payment reads `status: refunded` and therefore fails the check.
 6. If the user closes the modal, no order is created and no money moves.
+7. If verification fails (for example, the cart changed while the customer was paying), nothing is uploaded and no order is created. The payment stays captured at Razorpay, and the orphaned-payment alert tells admins to review it and refund it. A second order cannot reuse a payment: the unique indexes refuse it.
 
 ### Availability gate
 
@@ -274,3 +275,5 @@ A client form posts to a server action. A hidden `website` field is a honeypot: 
 - If an order insert fails after the PO upload, the file is orphaned and only logged for manual cleanup.
 - `/trade/dashboard` checks the role itself instead of using `requireRole`, so it does not redirect an account that has not finished onboarding.
 - Production observability is thin: Vercel Hobby keeps runtime logs only briefly and Razorpay's test dashboard shows no webhook delivery history.
+- A payment refused at checkout (for example after a cart change) stays captured until an admin refunds it; there is no automatic refund for that case.
+- The customer-facing message for a refused payment currently includes internal amounts and should be made friendlier.

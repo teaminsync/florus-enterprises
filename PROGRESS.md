@@ -4,14 +4,17 @@ A dated log of what was built, the decisions behind it, and what was verified. E
 
 Dates come from migration timestamps, commits and deployment records. Entries marked "Sep 2026" have no recorded day. "Verified" always means a real observation (a terminal result, a database row, or a browser test), never code inspection alone.
 
-## Current state (October 14, 2026)
+## Current state (October 15, 2026)
 
 - Live at <https://www.florus.in>: public catalog of 228 products, trade registration and approval, trade pricing, cart, checkout with purchase-order upload, admin order review, and transactional email.
 - **Cash on delivery is live. Online payment is built and tested in Razorpay test mode but hidden in production** until live keys exist (account activation pending).
 - Test-mode refund path verified end to end, including the webhook that marks refunds complete.
+- Each online payment is verified with Razorpay before an order is created (captured, same order, same user, amount equal to the cart total), and one payment can back only one order.
 
 ## Planned before go-live
 
+- Further input-validation and abuse-protection hardening (Checkpoint 35).
+- Remove or secure the demo trade accounts, clear test orders, and decide whether production should have its own Supabase project (local development and production share one today).
 - Seed categories in a migration so a new database builds in one step.
 - Razorpay account activation, live keys and a live webhook (steps in the README).
 - Florus to supply the missing SAP code for TELMICLAR TAB 40MG,15'S.
@@ -111,7 +114,7 @@ Dates come from migration timestamps, commits and deployment records. Entries ma
 - New payment columns on `orders`; payment details on trade and admin order pages.
 - Verified in test mode: COD unchanged, online success, failure screen, and modal dismissal.
 
-### Checkpoint 27 — Refunds and webhook · Sep 2026
+### Checkpoint 27 — Refunds and webhook · Sep 20–23, 2026
 - Rejecting a captured online order refunds it in full automatically. The rejection stands even if the refund fails, which raises an urgent alert.
 - Webhook handles `payment.captured`, `refund.processed` and `refund.failed`.
 - Found and fixed: alert emails used a nonexistent variable and went to nobody.
@@ -143,16 +146,17 @@ Dates come from migration timestamps, commits and deployment records. Entries ma
 - Adding an item already in the cart adds to its quantity, capped at 9,999 with a clear error.
 - Verified in a browser: 5 then 3 gives 8; adding 9,992 more is refused; a second product adds normally.
 
-### Checkpoint 33 — Admin role enforced on application actions · Oct 14, 2026
+### Checkpoint 33 — Admin role enforced on application actions · Oct 15, 2026
 - Approve and reject now verify the admin role on the server and take the reviewer from the session instead of the submitted form.
 - Every other server action was audited: all 18 are either gated (`requireRole` or `requireTradeAccountReady`), tied to the session, or intentionally public (contact, login, registration, forgot-password).
 - Verified on production: three approvals (invite link shown to the admin and emailed) and one rejection with a reason (emailed). On all four applications `reviewed_by` was the admin's profile ID taken from the session, and approved applicants received profiles.
 
-### Documentation rewrite · Oct 14, 2026
+### Documentation rewrite · Oct 15, 2026
 - README, ARCHITECTURE, TROUBLESHOOTING and PROGRESS rewritten as consolidated documents, with a proprietary-software notice in the README.
 
-### Checkpoint 34 — Payment verification hardened · Oct 15, 2026
-- Payment verification added before order creation: amount, status, ownership and uniqueness all checked against Razorpay. Payment signature comparison now uses `crypto.timingSafeEqual` (constant-time). Unique partial indexes prevent payment ID reuse. Duplicate payment use returns a clear error and deletes the uploaded PO.
-- Verification retries up to 4 times (1 second apart) if payment status is not `captured` yet.
-- Files: `verify-payment.ts` created, `actions.ts` updated with verification call and 23505 handling, migration adds unique indexes on `razorpay_payment_id` and `razorpay_order_id`.
-- Verified: build passes. Test script confirmed Razorpay API returns `amount` as number (paise), `payment.captured` as boolean, and `order.notes.userId` as string.
+### Checkpoint 34 — Online payments bound to their order · Oct 15, 2026
+- Before an order is created, the server fetches the payment and its Razorpay order and requires: payment captured, belonging to that Razorpay order, in INR, for exactly the server-computed cart total, and created for the same user. The checkout signature is now compared in constant time.
+- Unique database indexes allow only one order per Razorpay payment and per Razorpay order. A duplicate is refused with a clear message.
+- Razorpay's API was checked against a real test payment first: amounts are numbers in paise, a fully refunded payment reads `status: refunded` (so refunded payments cannot be reused), and the Razorpay order carries the user ID.
+- Verified: index migration applied and a duplicate insert rejected (`23505`); a normal paid order created, rejected and refunded, with the webhook setting `refunded`; and a payment made after the cart changed was refused with no order created, followed by the orphaned-payment alert for the still-captured test payment.
+- Follow-up: the customer-facing error text currently shows internal amounts and should be made friendlier.

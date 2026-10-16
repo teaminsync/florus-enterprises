@@ -72,7 +72,7 @@ Online payment is offered only when all three Razorpay variables are present. In
 | `scripts/seed-admin.ts` | Creates or verifies the single admin account. Reusable, idempotent |
 | `scripts/reset-test-data.ts` | Clears test activity. **Destructive** |
 
-`reset-test-data.ts` deletes all carts, all orders (with items and history), all uploaded PO files, and every trade account except the admin and four demo accounts (doctor, hospital, pharmacy, retailer). Their IDs are hardcoded at the top of the script and belong to the current Supabase project; edit them before using the script against any other database. Because local and production share a project, running it affects production data.
+`reset-test-data.ts` deletes all carts, all orders (with items and history), all uploaded PO files, and every trade account except the admin and four demo accounts (doctor, hospital, pharmacy, retailer). Their IDs are hardcoded at the top of the script and belong to the current Supabase project; edit them before using the script against any other database. Because local and production share a project, running it affects production data. Known gap: it does not delete applications that have no linked profile (pending or rejected ones), because its filter skips null values; delete those rows in the Supabase SQL editor until the script is fixed. Its "Deleted N" lines are also unreliable, so trust the verification counts at the end.
 
 Any other script in `scripts/` is a one-off that should have been deleted after use.
 
@@ -119,7 +119,7 @@ public/                 logo, favicons, web manifest
 - **Rejecting a paid-online order** refunds the full amount automatically. The order page shows the payment status (`refund_initiated`, then `refunded` once Razorpay confirms by webhook).
 - **Alert emails** go to the addresses in `ADMIN_EMAILS` (`src/utils/email/admin-recipients.ts`):
   - *Refund Failed*: the order was rejected but the refund did not go through. Refund the payment manually in the Razorpay Dashboard. The webhook matches refunds by payment ID, so the order should update itself; verify on the order page.
-  - *Orphaned Payment*: sent only if a captured payment still has no order 40 seconds later. First search `/admin/orders` for the payment ID. If there is truly no order, contact the customer and either create the order manually or refund in the Razorpay Dashboard.
+  - *Orphaned Payment*: sent only if a captured payment still has no order 40 seconds later. First search `/admin/orders` for the payment ID. If there is truly no order, contact the customer and either create the order manually or refund in the Razorpay Dashboard. The same alert follows when checkout refuses a payment because it does not match the order (for example, the cart changed while the customer was paying): that customer has been charged and needs a refund.
 - **Customer detail changes.** Trade users cannot edit their registration details. They are asked to email `team@florus.in`.
 
 ## Deployment
@@ -139,7 +139,7 @@ Online payment stays hidden until every step below is done.
 2. Generate live API keys.
 3. Register a **live-mode** webhook for the same URL and events. It has its own secret.
 4. In Vercel Production set `RAZORPAY_KEY_ID` (`rzp_live_...`), `RAZORPAY_KEY_SECRET`, and replace `RAZORPAY_WEBHOOK_SECRET` with the live secret. Redeploy.
-5. Complete the payment-verification hardening listed under "Planned before go-live" in [PROGRESS.md](PROGRESS.md).
+5. Complete the items under "Planned before go-live" in [PROGRESS.md](PROGRESS.md). Remove or secure the demo trade accounts and clear test orders (`reset-test-data.ts` preserves the demo set, so delete those accounts separately), because local development and production share one database.
 6. Make a small real payment, reject the order, and confirm the refund and the `refunded` status. Confirm alert emails reach every address in `ADMIN_EMAILS`.
 
 ## Known open items
