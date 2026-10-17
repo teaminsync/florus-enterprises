@@ -49,7 +49,7 @@ export function CheckoutForm({ userId, onlinePaymentEnabled }: CheckoutFormProps
     }
   }, [selectedFile]);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     setError(null);
 
@@ -58,17 +58,12 @@ export function CheckoutForm({ userId, onlinePaymentEnabled }: CheckoutFormProps
       return;
     }
 
-    // Validate file type
-    if (!ACCEPTED_FILE_TYPES.includes(file.type)) {
-      setError('Please upload a PDF, JPG, or PNG file');
-      setSelectedFile(null);
-      e.target.value = '';
-      return;
-    }
+    // Validate file using shared validation module
+    const { validatePoFile } = await import('@/utils/orders/po-file');
+    const validation = await validatePoFile(file);
 
-    // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      setError('File size must be less than 10MB');
+    if (!validation.ok) {
+      setError(validation.error);
       setSelectedFile(null);
       e.target.value = '';
       return;

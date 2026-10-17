@@ -36,15 +36,14 @@ export async function resubmitOrderAction(formData: FormData): Promise<ActionRes
     }
 
     // Validate file
-    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-    if (!allowedTypes.includes(poFile.type)) {
-      return { success: false, error: 'Only PDF, JPG, and PNG files are allowed' };
+    const { validatePoFile, buildPoStoragePath } = await import('@/utils/orders/po-file');
+    const validation = await validatePoFile(poFile);
+    
+    if (!validation.ok) {
+      return { success: false, error: validation.error };
     }
 
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (poFile.size > maxSize) {
-      return { success: false, error: 'File size must be less than 10MB' };
-    }
+    const fileKind = validation.kind;
 
     const adminClient = createAdminClient();
 
@@ -73,14 +72,12 @@ export async function resubmitOrderAction(formData: FormData): Promise<ActionRes
     }
 
     // Upload new PO file to storage
-    const timestamp = Date.now();
-    const fileExtension = poFile.name.split('.').pop();
-    const storagePath = `${userId}/${timestamp}-${poFile.name}`;
+    const storagePath = buildPoStoragePath(userId, poFile.name, fileKind);
 
     const { error: uploadError } = await supabase.storage
       .from('po-uploads')
       .upload(storagePath, poFile, {
-        contentType: poFile.type,
+        contentType: fileKind.contentType,
         upsert: false,
       });
 
@@ -94,7 +91,7 @@ export async function resubmitOrderAction(formData: FormData): Promise<ActionRes
       .from('orders')
       .update({
         po_storage_path: storagePath,
-        po_original_filename: poFile.name,
+        po_original_filename: poFile.name.slice(0, 200),
         status: 'pending_verification',
         admin_feedback: null, // Clear previous feedback
         updated_at: new Date().toISOString(),

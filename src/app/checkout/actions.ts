@@ -42,6 +42,27 @@ export async function submitOrderAction(formData: FormData) {
     return { success: false, error: 'Authentication error' };
   }
 
+  // Validate PO file
+  const { validatePoFile, buildPoStoragePath } = await import('@/utils/orders/po-file');
+  const validation = await validatePoFile(poFile);
+  
+  if (!validation.ok) {
+    if (paymentMethod === 'online') {
+      console.error('PO validation failed after payment method selected', {
+        userId,
+        paymentMethod,
+        error: validation.error,
+      });
+      return {
+        success: false,
+        error: 'We could not accept the purchase order file. If your payment was taken, please contact support and our team will review it.',
+      };
+    }
+    return { success: false, error: validation.error };
+  }
+
+  const fileKind = validation.kind;
+
   // If online payment, verify signature BEFORE proceeding
   if (paymentMethod === 'online') {
     if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
@@ -117,14 +138,12 @@ export async function submitOrderAction(formData: FormData) {
   }
 
   // 5. Upload PO file to storage
-  const timestamp = Date.now();
-  const fileExtension = poFile.name.split('.').pop();
-  const storagePath = `${userId}/${timestamp}-${poFile.name}`;
+  const storagePath = buildPoStoragePath(userId, poFile.name, fileKind);
 
   const { error: uploadError } = await supabase.storage
     .from('po-uploads')
     .upload(storagePath, poFile, {
-      contentType: poFile.type,
+      contentType: fileKind.contentType,
       upsert: false,
     });
 
@@ -141,7 +160,7 @@ export async function submitOrderAction(formData: FormData) {
       user_id: userId,
       status: 'pending_verification',
       po_storage_path: storagePath,
-      po_original_filename: poFile.name,
+      po_original_filename: poFile.name.slice(0, 200),
       subtotal_ex_gst: subtotalExGst,
       gst_amount: gstAmount,
       total_incl_gst: totalInclGst,

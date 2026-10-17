@@ -14,23 +14,18 @@ export function ResubmitForm({ orderId }: ResubmitFormProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
-    // Validate file type
-    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-    if (!allowedTypes.includes(selectedFile.type)) {
-      setError('Only PDF, JPG, and PNG files are allowed');
-      setFile(null);
-      return;
-    }
+    // Validate file using shared validation module
+    const { validatePoFile } = await import('@/utils/orders/po-file');
+    const validation = await validatePoFile(selectedFile);
 
-    // Validate file size (10MB max)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (selectedFile.size > maxSize) {
-      setError('File size must be less than 10MB');
+    if (!validation.ok) {
+      setError(validation.error);
       setFile(null);
+      e.target.value = '';
       return;
     }
 
