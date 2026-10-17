@@ -111,7 +111,7 @@ export async function submitOrderAction(formData: FormData) {
       });
       return {
         success: false,
-        error: `Payment verification failed: ${verificationResult.error}`,
+        error: verificationResult.error,
       };
     }
   }
@@ -173,6 +173,12 @@ export async function submitOrderAction(formData: FormData) {
           success: false,
           error: 'This payment has already been used for another order. Please contact support if you believe this is an error.',
         };
+      }
+      
+      // Best-effort cleanup for other errors
+      const { error: removeError } = await supabase.storage.from('po-uploads').remove([storagePath]);
+      if (removeError) {
+        console.error('Failed to clean up PO file after order insert failure:', removeError);
       }
       
       // Orphaned file - log for manual cleanup
