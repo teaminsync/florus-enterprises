@@ -105,17 +105,20 @@ export async function POST(request: NextRequest) {
 
             // If still no order after grace window, send alert
             if (!orderFound) {
-              // Best-effort check: skip alert if payment is already refunded
+              // Check ledger: skip alert if payment was automatically refunded
               try {
-                const { razorpayClient } = await import('@/utils/razorpay/client');
-                const paymentStatus = await razorpayClient.payments.fetch(paymentId);
+                const { data: autoRefund } = await adminClientDeferred
+                  .from('auto_refunds')
+                  .select('razorpay_payment_id')
+                  .eq('razorpay_payment_id', paymentId)
+                  .maybeSingle();
                 
-                if (paymentStatus.status === 'refunded') {
-                  console.log('Orphan check cleared: payment already refunded', { paymentId });
+                if (autoRefund) {
+                  console.log('Orphan check cleared: automatically refunded', { paymentId });
                   return;
                 }
               } catch (error) {
-                console.warn('Could not check payment status before alerting:', error);
+                console.warn('Could not check auto_refunds ledger before alerting:', error);
                 // Continue to send alert
               }
 

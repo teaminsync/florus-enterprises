@@ -157,6 +157,25 @@ export async function verifyRazorpayPayment(
         refundId: refund.id,
       });
 
+      // Write to ledger so webhook orphan check can skip this payment without API call
+      const { createAdminClient } = await import('@/utils/supabase/admin');
+      const adminClient = createAdminClient();
+      
+      const { error: ledgerError } = await adminClient
+        .from('auto_refunds')
+        .insert({
+          razorpay_payment_id: razorpayPaymentId,
+          razorpay_order_id: razorpayOrderId,
+          razorpay_refund_id: refund.id,
+          user_id: userId,
+          amount_paise: paymentAmount,
+        });
+
+      if (ledgerError) {
+        console.error('Failed to write auto_refunds ledger entry:', ledgerError);
+        // Non-fatal - customer still got refunded
+      }
+
       return {
         success: false,
         error: 'Your cart changed while you were paying, so your payment has been refunded in full. Please review your cart and try again.',
