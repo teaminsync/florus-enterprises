@@ -71,14 +71,14 @@ async function resetTestData() {
     console.log('Step 1: Deleting cart items...');
     const { error: cartError, count: cartCount } = await supabase
       .from('cart_items')
-      .delete()
+      .delete({ count: 'exact' })
       .neq('user_id', ADMIN_ID); // admin never has a cart anyway; demo accounts' carts ARE deleted
 
     if (cartError) {
       console.error('❌ Failed to delete cart items:', cartError);
       return;
     }
-    console.log(`✓ Deleted ${cartCount || 0} cart items\n`);
+    console.log(`✓ Deleted ${cartCount ?? 0} cart items\n`);
 
     // Step 2: Delete PO files from storage (ALL of them, including demo accounts')
     console.log('Step 2: Deleting PO files from storage...');
@@ -118,27 +118,63 @@ async function resetTestData() {
     console.log('Step 3: Deleting orders (cascades to items and history)...');
     const { error: ordersError, count: ordersCount } = await supabase
       .from('orders')
-      .delete()
+      .delete({ count: 'exact' })
       .neq('user_id', ADMIN_ID); // admin never places orders; demo accounts' orders ARE deleted
 
     if (ordersError) {
       console.error('❌ Failed to delete orders:', ordersError);
       return;
     }
-    console.log(`✓ Deleted ${ordersCount || 0} orders (and their items/history)\n`);
+    console.log(`✓ Deleted ${ordersCount ?? 0} orders (and their items/history)\n`);
+
+    // Step 3a: Delete auto_refunds
+    console.log('Step 3a: Deleting auto_refunds...');
+    const { error: refundsError, count: refundsCount } = await supabase
+      .from('auto_refunds')
+      .delete({ count: 'exact' })
+      .neq('razorpay_payment_id', '');
+
+    if (refundsError) {
+      console.error('❌ Failed to delete auto_refunds:', refundsError);
+      return;
+    }
+    console.log(`✓ Deleted ${refundsCount ?? 0} auto_refunds\n`);
 
     // Step 4: Delete trade applications — EXCLUDING preserved demo accounts
     console.log('Step 4: Deleting trade applications (excluding demo accounts)...');
-    const { error: appsError, count: appsCount } = await supabase
+    
+    // Fetch all applications to handle NULL linked_profile_id in code
+    const { data: allApps, error: fetchAppsError } = await supabase
       .from('trade_applications')
-      .delete()
-      .not('linked_profile_id', 'in', `(${ALL_PRESERVED_IDS.join(',')})`);
-
-    if (appsError) {
-      console.error('❌ Failed to delete trade applications:', appsError);
+      .select('id, linked_profile_id');
+    
+    if (fetchAppsError) {
+      console.error('❌ Failed to fetch trade applications:', fetchAppsError);
       return;
     }
-    console.log(`✓ Deleted ${appsCount || 0} trade applications\n`);
+    
+    const appsToDelete = (allApps || [])
+      .filter(app => app.linked_profile_id === null || !PRESERVED_TRADE_USER_IDS.includes(app.linked_profile_id))
+      .map(app => app.id);
+    
+    let totalAppsDeleted = 0;
+    
+    // Delete in chunks of 100
+    for (let i = 0; i < appsToDelete.length; i += 100) {
+      const chunk = appsToDelete.slice(i, i + 100);
+      const { count, error: deleteError } = await supabase
+        .from('trade_applications')
+        .delete({ count: 'exact' })
+        .in('id', chunk);
+      
+      if (deleteError) {
+        console.error('❌ Failed to delete application chunk:', deleteError);
+        return;
+      }
+      totalAppsDeleted += count ?? 0;
+    }
+    
+    console.log(`✓ Deleted ${totalAppsDeleted} trade applications\n`);
 
     // Step 5: Find trade user IDs — EXCLUDING preserved demo accounts
     console.log('Step 5: Finding trade user profiles (excluding demo accounts)...');
@@ -161,14 +197,14 @@ async function resetTestData() {
       console.log('Step 6: Deleting trade profiles...');
       const { error: deleteProfilesError, count: profilesCount } = await supabase
         .from('profiles')
-        .delete()
+        .delete({ count: 'exact' })
         .in('id', tradeUserIds);
 
       if (deleteProfilesError) {
         console.error('❌ Failed to delete trade profiles:', deleteProfilesError);
         return;
       }
-      console.log(`✓ Deleted ${profilesCount || 0} trade profiles\n`);
+      console.log(`✓ Deleted ${profilesCount ?? 0} trade profiles\n`);
 
       // Step 7: Delete auth users (non-preserved only)
       console.log('Step 7: Deleting auth users...');
@@ -200,6 +236,10 @@ async function resetTestData() {
       .from('orders')
       .select('*', { count: 'exact', head: true });
 
+    const { count: remainingRefunds } = await supabase
+      .from('auto_refunds')
+      .select('*', { count: 'exact', head: true });
+
     const { count: remainingApps } = await supabase
       .from('trade_applications')
       .select('*', { count: 'exact', head: true });
@@ -225,19 +265,21 @@ async function resetTestData() {
     const expectedApps = PRESERVED_TRADE_USER_IDS.length;
 
     console.log('\n=== Verification Results ===');
-    console.log(`Cart items: ${remainingCarts || 0} (should be 0)`);
-    console.log(`Orders: ${remainingOrders || 0} (should be 0)`);
-    console.log(`Trade applications: ${remainingApps || 0} (should be ${expectedApps} - demo accounts only)`);
-    console.log(`Trade profiles: ${remainingTradeProfiles || 0} (should be ${expectedTradeProfiles} - demo accounts only)`);
+    console.log(`Cart items: ${remainingCarts ?? 0} (should be 0)`);
+    console.log(`Orders: ${remainingOrders ?? 0} (should be 0)`);
+    console.log(`Auto refunds: ${remainingRefunds ?? 0} (should be 0)`);
+    console.log(`Trade applications: ${remainingApps ?? 0} (should be ${expectedApps} - demo accounts only)`);
+    console.log(`Trade profiles: ${remainingTradeProfiles ?? 0} (should be ${expectedTradeProfiles} - demo accounts only)`);
     console.log(`Auth users: ${authUserCount} (should be ${expectedAuthUsers} - admin + demo accounts)`);
-    console.log(`Products: ${productCount || 0} (preserved)`);
-    console.log(`Categories: ${categoryCount || 0} (preserved)\n`);
+    console.log(`Products: ${productCount ?? 0} (preserved)`);
+    console.log(`Categories: ${categoryCount ?? 0} (preserved)\n`);
 
     if (
-      (remainingCarts || 0) === 0 &&
-      (remainingOrders || 0) === 0 &&
-      (remainingApps || 0) === expectedApps &&
-      (remainingTradeProfiles || 0) === expectedTradeProfiles &&
+      (remainingCarts ?? 0) === 0 &&
+      (remainingOrders ?? 0) === 0 &&
+      (remainingRefunds ?? 0) === 0 &&
+      (remainingApps ?? 0) === expectedApps &&
+      (remainingTradeProfiles ?? 0) === expectedTradeProfiles &&
       authUserCount === expectedAuthUsers
     ) {
       console.log('✅ Reset complete! Database is ready for fresh testing, demo accounts intact.\n');

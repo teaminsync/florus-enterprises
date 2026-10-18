@@ -9,15 +9,6 @@ interface CheckoutFormProps {
   onlinePaymentEnabled: boolean;
 }
 
-const ACCEPTED_FILE_TYPES = [
-  'application/pdf',
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-];
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-
 // Razorpay types
 declare global {
   interface Window {

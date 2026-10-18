@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { updateCartItemAction, removeCartItemAction } from './actions';
 
@@ -30,8 +30,11 @@ export function CartItemRow({
   const [inputValue, setInputValue] = useState(String(initialQuantity));
   const [isUpdating, setIsUpdating] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const inFlightRef = useRef<boolean>(false);
 
   async function commitQuantity() {
+    if (inFlightRef.current) return;
+
     const parsed = Number(inputValue);
 
     // Validate: must be integer, >= 1, <= 9999
@@ -44,18 +47,22 @@ export function CartItemRow({
     if (parsed === committedQty) return;
 
     setIsUpdating(true);
+    inFlightRef.current = true;
 
-    const result = await updateCartItemAction(cartItemId, parsed);
+    try {
+      const result = await updateCartItemAction(cartItemId, parsed);
 
-    if (result.success) {
-      setCommittedQty(parsed);
-      setInputValue(String(parsed));
-    } else {
-      setInputValue(String(committedQty));
-      alert(result.error || 'Failed to update quantity');
+      if (result.success) {
+        setCommittedQty(parsed);
+        setInputValue(String(parsed));
+      } else {
+        setInputValue(String(committedQty));
+        alert(result.error || 'Failed to update quantity');
+      }
+    } finally {
+      setIsUpdating(false);
+      inFlightRef.current = false;
     }
-
-    setIsUpdating(false);
   }
 
   async function handleRemove() {
