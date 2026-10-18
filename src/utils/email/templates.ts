@@ -2,6 +2,27 @@ const BRAND_COLOR = '#009EE0';
 const ALERT_COLOR = '#DC2626'; // Red for urgent alerts
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
+/**
+ * Escape HTML special characters to prevent injection
+ */
+function escapeHtml(value: unknown): string {
+  const str = String(value);
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Convert to single line by replacing CR/LF with space
+ */
+function singleLine(value: unknown): string {
+  const str = String(value);
+  return str.replace(/[\r\n]+/g, ' ');
+}
+
 function getEmailWrapper(bodyHtml: string): string {
   return `
     <!DOCTYPE html>
@@ -100,7 +121,7 @@ function getButton(text: string, url: string): string {
 export function tradeApplicationSubmittedApplicantEmail(fullName: string): { subject: string; html: string } {
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Application Received</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Thank you for applying to become a trade partner with Florus Enterprises. We've received your application and our team will review it shortly.</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">You'll receive an email from us once we've completed our review.</p>
     <p style="margin: 24px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">Best regards,<br>The Florus Team</p>
@@ -123,15 +144,15 @@ export function tradeApplicationSubmittedAdminEmail(
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">New Trade Application</h2>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">A new trade application has been submitted:</p>
     <ul style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">
-      <li><strong>Name:</strong> ${fullName}</li>
-      <li><strong>Type:</strong> ${applicantType}</li>
-      <li><strong>Application ID:</strong> ${applicationId}</li>
+      <li><strong>Name:</strong> ${escapeHtml(fullName)}</li>
+      <li><strong>Type:</strong> ${escapeHtml(applicantType)}</li>
+      <li><strong>Application ID:</strong> ${escapeHtml(applicationId)}</li>
     </ul>
     ${getButton('Review Application', applicationUrl)}
   `;
 
   return {
-    subject: `New Trade Application: ${fullName}`,
+    subject: `New Trade Application: ${singleLine(fullName)}`,
     html: getEmailWrapper(bodyHtml),
   };
 }
@@ -140,7 +161,7 @@ export function tradeApplicationSubmittedAdminEmail(
 export function tradeApplicationApprovedEmail(fullName: string, inviteUrl: string): { subject: string; html: string } {
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Application Approved!</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Congratulations! Your application to become a trade partner with Florus Enterprises has been approved.</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Click the button below to set your password and activate your account:</p>
     ${getButton('Set Your Password', inviteUrl)}
@@ -157,11 +178,11 @@ export function tradeApplicationApprovedEmail(fullName: string, inviteUrl: strin
 export function tradeApplicationRejectedEmail(fullName: string, rejectionReason: string): { subject: string; html: string } {
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Application Update</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Thank you for your interest in becoming a trade partner with Florus Enterprises. After careful review, we're unable to approve your application at this time.</p>
     <div style="margin: 24px 0; padding: 20px; background-color: #f9f9f9; border-left: 4px solid #e0e0e0; border-radius: 4px;">
       <p style="margin: 0; color: #555555; font-size: 16px; line-height: 1.6;"><strong>Reason:</strong></p>
-      <p style="margin: 8px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">${rejectionReason}</p>
+      <p style="margin: 8px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">${escapeHtml(rejectionReason)}</p>
     </div>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">If you have questions or would like to discuss this further, please contact us at team@florus.in.</p>
     <p style="margin: 24px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">Best regards,<br>The Florus Team</p>
@@ -178,7 +199,7 @@ export function tradeAccountActivatedEmail(fullName: string): { subject: string;
   const loginUrl = `${SITE_URL}/trade/login`;
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Welcome Aboard!</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Your Florus Enterprises trade account is now active and ready to use. You can start browsing our catalog and placing orders.</p>
     ${getButton('Browse Catalog', `${SITE_URL}/medicines`)}
     <p style="margin: 24px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">You can log in anytime at <a href="${loginUrl}" style="color: ${BRAND_COLOR}; text-decoration: none;">${loginUrl}</a></p>
@@ -195,10 +216,10 @@ export function orderSubmittedCustomerEmail(fullName: string, orderId: string, t
   const orderUrl = `${SITE_URL}/orders/${orderId}`;
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Order Received</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Thank you for your order. We've received it and our team will review it shortly.</p>
     <ul style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">
-      <li><strong>Order ID:</strong> ${orderId}</li>
+      <li><strong>Order ID:</strong> ${escapeHtml(orderId)}</li>
       <li><strong>Total (incl. GST):</strong> ₹${totalInclGst.toFixed(2)}</li>
     </ul>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">You'll receive a confirmation email once your order has been approved.</p>
@@ -206,7 +227,7 @@ export function orderSubmittedCustomerEmail(fullName: string, orderId: string, t
   `;
 
   return {
-    subject: `Order Received #${orderId} - Florus Enterprises`,
+    subject: `Order Received #${singleLine(orderId)} - Florus Enterprises`,
     html: getEmailWrapper(bodyHtml),
   };
 }
@@ -218,15 +239,15 @@ export function orderSubmittedAdminEmail(fullName: string, orderId: string, tota
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">New Order Submitted</h2>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">A new order has been placed:</p>
     <ul style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">
-      <li><strong>Customer:</strong> ${fullName}</li>
-      <li><strong>Order ID:</strong> ${orderId}</li>
+      <li><strong>Customer:</strong> ${escapeHtml(fullName)}</li>
+      <li><strong>Order ID:</strong> ${escapeHtml(orderId)}</li>
       <li><strong>Total (incl. GST):</strong> ₹${totalInclGst.toFixed(2)}</li>
     </ul>
     ${getButton('Review Order', orderUrl)}
   `;
 
   return {
-    subject: `New Order: ${fullName} - ₹${totalInclGst.toFixed(2)}`,
+    subject: `New Order: ${singleLine(fullName)} - ₹${totalInclGst.toFixed(2)}`,
     html: getEmailWrapper(bodyHtml),
   };
 }
@@ -236,14 +257,14 @@ export function orderApprovedEmail(fullName: string, orderId: string): { subject
   const orderUrl = `${SITE_URL}/orders/${orderId}`;
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Order Approved</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Great news! Your order #${orderId} has been approved and is now being processed for fulfillment.</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Great news! Your order #${escapeHtml(orderId)} has been approved and is now being processed for fulfillment.</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">We'll notify you when your order has been fulfilled.</p>
     ${getButton('View Order', orderUrl)}
   `;
 
   return {
-    subject: `Order Approved #${orderId} - Florus Enterprises`,
+    subject: `Order Approved #${singleLine(orderId)} - Florus Enterprises`,
     html: getEmailWrapper(bodyHtml),
   };
 }
@@ -253,18 +274,18 @@ export function orderRejectedEmail(fullName: string, orderId: string, rejectionR
   const orderUrl = `${SITE_URL}/orders/${orderId}`;
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Order Update</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">We're unable to process your order #${orderId} at this time.</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">We're unable to process your order #${escapeHtml(orderId)} at this time.</p>
     <div style="margin: 24px 0; padding: 20px; background-color: #f9f9f9; border-left: 4px solid #e0e0e0; border-radius: 4px;">
       <p style="margin: 0; color: #555555; font-size: 16px; line-height: 1.6;"><strong>Reason:</strong></p>
-      <p style="margin: 8px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">${rejectionReason}</p>
+      <p style="margin: 8px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">${escapeHtml(rejectionReason)}</p>
     </div>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">If you have questions, please contact us at team@florus.in.</p>
     ${getButton('View Order Details', orderUrl)}
   `;
 
   return {
-    subject: `Order Update #${orderId} - Florus Enterprises`,
+    subject: `Order Update #${singleLine(orderId)} - Florus Enterprises`,
     html: getEmailWrapper(bodyHtml),
   };
 }
@@ -274,18 +295,18 @@ export function orderNeedsRevisionEmail(fullName: string, orderId: string, revis
   const orderUrl = `${SITE_URL}/orders/${orderId}`;
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Order Revision Needed</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Your order #${orderId} requires some changes before we can process it.</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Your order #${escapeHtml(orderId)} requires some changes before we can process it.</p>
     <div style="margin: 24px 0; padding: 20px; background-color: #f9f9f9; border-left: 4px solid #e0e0e0; border-radius: 4px;">
       <p style="margin: 0; color: #555555; font-size: 16px; line-height: 1.6;"><strong>Required Changes:</strong></p>
-      <p style="margin: 8px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">${revisionReason}</p>
+      <p style="margin: 8px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">${escapeHtml(revisionReason)}</p>
     </div>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Please review the order and resubmit with the necessary updates.</p>
     ${getButton('Review and Resubmit', orderUrl)}
   `;
 
   return {
-    subject: `Action Required: Order #${orderId} - Florus Enterprises`,
+    subject: `Action Required: Order #${singleLine(orderId)} - Florus Enterprises`,
     html: getEmailWrapper(bodyHtml),
   };
 }
@@ -295,14 +316,14 @@ export function orderResubmittedCustomerEmail(fullName: string, orderId: string)
   const orderUrl = `${SITE_URL}/orders/${orderId}`;
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Revised Order Received</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Thank you for resubmitting your order #${orderId}. We've received your updated order and our team will review it shortly.</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Thank you for resubmitting your order #${escapeHtml(orderId)}. We've received your updated order and our team will review it shortly.</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">You'll receive a confirmation email once your order has been approved.</p>
     ${getButton('View Order Details', orderUrl)}
   `;
 
   return {
-    subject: `Revised Order Received #${orderId} - Florus Enterprises`,
+    subject: `Revised Order Received #${singleLine(orderId)} - Florus Enterprises`,
     html: getEmailWrapper(bodyHtml),
   };
 }
@@ -314,14 +335,14 @@ export function orderResubmittedAdminEmail(fullName: string, orderId: string): {
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Order Resubmitted</h2>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">An order has been resubmitted for review:</p>
     <ul style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">
-      <li><strong>Customer:</strong> ${fullName}</li>
-      <li><strong>Order ID:</strong> ${orderId}</li>
+      <li><strong>Customer:</strong> ${escapeHtml(fullName)}</li>
+      <li><strong>Order ID:</strong> ${escapeHtml(orderId)}</li>
     </ul>
     ${getButton('Review Order', orderUrl)}
   `;
 
   return {
-    subject: `Order Resubmitted: ${fullName} #${orderId}`,
+    subject: `Order Resubmitted: ${singleLine(fullName)} #${singleLine(orderId)}`,
     html: getEmailWrapper(bodyHtml),
   };
 }
@@ -331,14 +352,14 @@ export function orderFulfilledEmail(fullName: string, orderId: string): { subjec
   const orderUrl = `${SITE_URL}/orders/${orderId}`;
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Order Fulfilled</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Your order #${orderId} has been fulfilled. Thank you for your business!</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Your order #${escapeHtml(orderId)} has been fulfilled. Thank you for your business!</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">We appreciate your partnership with Florus Enterprises.</p>
     ${getButton('View Order Details', orderUrl)}
   `;
 
   return {
-    subject: `Order Fulfilled #${orderId} - Florus Enterprises`,
+    subject: `Order Fulfilled #${singleLine(orderId)} - Florus Enterprises`,
     html: getEmailWrapper(bodyHtml),
   };
 }
@@ -347,7 +368,7 @@ export function orderFulfilledEmail(fullName: string, orderId: string): { subjec
 export function contactFormSubmittedEmail(fullName: string): { subject: string; html: string } {
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Message Received</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Thank you for reaching out to Florus Enterprises. We've received your message and our team will get back to you soon.</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">We typically respond within 1-2 business days.</p>
     <p style="margin: 24px 0 0 0; color: #555555; font-size: 16px; line-height: 1.6;">Best regards,<br>The Florus Team</p>
@@ -379,7 +400,7 @@ export function passwordResetRequestedEmail(resetUrl: string): { subject: string
 export function passwordChangedConfirmationEmail(fullName: string): { subject: string; html: string } {
   const bodyHtml = `
     <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px;">Password Changed</h2>
-    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${fullName},</p>
+    <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Hi ${escapeHtml(fullName)},</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">Your Florus Enterprises account password was just changed.</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;">If you made this change, no action is needed.</p>
     <p style="margin: 0 0 16px 0; color: #555555; font-size: 16px; line-height: 1.6;"><strong>If you did NOT make this change, please contact us immediately at team@florus.in.</strong></p>
@@ -400,7 +421,7 @@ export function orphanedPaymentAlertEmail(paymentId: string, amountInPaise: numb
     <p style="margin: 0 0 16px 0; color: #7C2D12; font-size: 16px; line-height: 1.6;"><strong>CRITICAL:</strong> A Razorpay payment was successfully captured, but NO corresponding order exists in the system.</p>
     
     <div style="background-color: #FEE2E2; border-left: 4px solid #DC2626; padding: 16px; margin: 24px 0;">
-      <p style="margin: 0 0 8px 0; color: #7C2D12; font-size: 14px;"><strong>Payment ID:</strong> <code style="background-color: #FCA5A5; padding: 2px 6px; border-radius: 3px; font-family: monospace;">${paymentId}</code></p>
+      <p style="margin: 0 0 8px 0; color: #7C2D12; font-size: 14px;"><strong>Payment ID:</strong> <code style="background-color: #FCA5A5; padding: 2px 6px; border-radius: 3px; font-family: monospace;">${escapeHtml(paymentId)}</code></p>
       <p style="margin: 0; color: #7C2D12; font-size: 14px;"><strong>Amount:</strong> ₹${amountInRupees}</p>
     </div>
 
@@ -438,8 +459,8 @@ export function refundFailedAlertEmail(orderId: string, paymentId: string): { su
     <p style="margin: 0 0 16px 0; color: #7C2D12; font-size: 16px; line-height: 1.6;"><strong>CRITICAL:</strong> An automatic refund attempt failed for a rejected order.</p>
     
     <div style="background-color: #FEE2E2; border-left: 4px solid #DC2626; padding: 16px; margin: 24px 0;">
-      <p style="margin: 0 0 8px 0; color: #7C2D12; font-size: 14px;"><strong>Order ID:</strong> <code style="background-color: #FCA5A5; padding: 2px 6px; border-radius: 3px; font-family: monospace;">${orderId}</code></p>
-      <p style="margin: 0; color: #7C2D12; font-size: 14px;"><strong>Payment ID:</strong> <code style="background-color: #FCA5A5; padding: 2px 6px; border-radius: 3px; font-family: monospace;">${paymentId}</code></p>
+      <p style="margin: 0 0 8px 0; color: #7C2D12; font-size: 14px;"><strong>Order ID:</strong> <code style="background-color: #FCA5A5; padding: 2px 6px; border-radius: 3px; font-family: monospace;">${escapeHtml(orderId)}</code></p>
+      <p style="margin: 0; color: #7C2D12; font-size: 14px;"><strong>Payment ID:</strong> <code style="background-color: #FCA5A5; padding: 2px 6px; border-radius: 3px; font-family: monospace;">${escapeHtml(paymentId)}</code></p>
     </div>
 
     <p style="margin: 24px 0 16px 0; color: #7C2D12; font-size: 16px; line-height: 1.6;"><strong>The order has been successfully rejected, but the customer's payment could not be automatically refunded.</strong></p>
@@ -447,7 +468,7 @@ export function refundFailedAlertEmail(orderId: string, paymentId: string): { su
     <p style="margin: 0 0 16px 0; color: #7C2D12; font-size: 16px; line-height: 1.6;"><strong>Required actions:</strong></p>
     <ol style="margin: 0 0 24px 0; padding-left: 24px; color: #7C2D12; font-size: 15px; line-height: 1.8;">
       <li>Log into the Razorpay Dashboard</li>
-      <li>Locate payment ID: <code style="background-color: #FCA5A5; padding: 2px 6px; border-radius: 3px; font-family: monospace;">${paymentId}</code></li>
+      <li>Locate payment ID: <code style="background-color: #FCA5A5; padding: 2px 6px; border-radius: 3px; font-family: monospace;">${escapeHtml(paymentId)}</code></li>
       <li>Process a manual refund through the Dashboard</li>
       <li>Update the order's payment_status in the database once confirmed</li>
       <li>Optionally notify the customer directly about the refund timeline</li>
@@ -465,7 +486,7 @@ export function refundFailedAlertEmail(orderId: string, paymentId: string): { su
   `;
 
   return {
-    subject: `🚨 URGENT: Refund Failed for Order #${orderId.slice(0, 8)}`,
+    subject: `🚨 URGENT: Refund Failed for Order #${singleLine(orderId).slice(0, 8)}`,
     html: getAlertEmailWrapper(bodyHtml),
   };
 }
