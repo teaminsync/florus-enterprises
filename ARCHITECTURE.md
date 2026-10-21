@@ -24,10 +24,11 @@ How the platform is built and why. This document describes the system as it stan
 
 Principles that shape every part of the system:
 
-1. **The server decides.** Roles, user IDs, prices, totals and amounts are always derived on the server. Nothing the browser sends about identity or money is trusted.
-2. **Two independent database gates.** A table `GRANT` and a row-level-security policy are separate checks. Both must exist and each is verified on its own.
+1. **The server decides.** Roles, user IDs, prices, totals, amounts and file types are always derived or verified on the server. Nothing the browser sends about identity, money or file contents is trusted.
+2. **Two independent database gates.** A table `GRANT` and a row-level-security policy are separate checks. Both must exist, must cover every operation the app or its scripts perform, and are verified separately.
 3. **Business actions never fail because of email.** Every email send is non-fatal.
 4. **Money paths are explicit.** Payment, refund and alert behavior is spelled out in code and tested against the real Razorpay test environment.
+5. **Know where code runs.** The webhook runs on production, which has no Razorpay API keys, so it relies on the database, never on the Razorpay API.
 
 ## 2. Code organization
 
@@ -54,6 +55,7 @@ All tables are in `public` with UUID primary keys, created by the migrations in 
 | `orders` | `user_id`, `status`, PO path and filename, `admin_feedback`, `subtotal_ex_gst`, `gst_amount`, `total_incl_gst`, `payment_method` (`cod` or `online`), `razorpay_order_id`, `razorpay_payment_id`, `payment_status` (`captured`, `refund_initiated`, `refunded`, `refund_failed`; null for COD), `razorpay_refund_id`. Unique indexes on `razorpay_payment_id` and `razorpay_order_id` (where present) allow one order per payment |
 | `order_items` | `order_id`, `product_id`, `quantity`, `unit_price_ex_gst_snapshot`. There is **no** `gst_percent` column |
 | `order_status_history` | One row per transition: `status`, `note`, `changed_by` (always a real profile ID), `changed_at` |
+| `auto_refunds` | Ledger of automatic refunds: `razorpay_payment_id` (primary key), `razorpay_order_id`, `razorpay_refund_id`, `user_id` (no foreign key, so deleting profiles is never blocked), `amount_paise`, `reason`, `created_at`. RLS is on with no policies; only the service role can read, insert and delete |
 
 Notes on the catalog:
 
@@ -65,7 +67,7 @@ Notes on the catalog:
 
 ### Storage
 
-One private bucket, `po-uploads`, holds purchase orders at `{user_id}/{timestamp}-{filename}`. A trade user can upload and read only their own files (policy on `owner_id`). Admin access goes through the admin client with signed URLs, so no admin storage policy exists.
+One private bucket, `po-uploads`, holds purchase orders at `{user_id}/{timestamp}-{sanitized-name}.{pdf|jpg|png}`. The extension comes from the detected file type, not from the uploaded name. A trade user can upload and read only their own files (policy on `owner_id`). Admin access goes through the admin client with signed URLs, so no admin storage policy exists.
 
 ### Database function
 
@@ -77,9 +79,10 @@ One private bucket, `po-uploads`, holds purchase orders at `{user_id}/{timestamp
 
 1. **Session.** Middleware keeps the Supabase session fresh.
 2. **Page gates.** `requireRole('admin' | 'trade')` reads the verified session and the user's `profiles` row. No user or no profile redirects to `/trade/login`. A role mismatch redirects to that user's real home (`getAuthHomeRoute`). A trade user who has not set a password is sent to `/trade/set-password`.
-3. **Action gates.**
+3. **Action gates.** A Server Action is a public endpoint, so every action carries its own check.
    - `requireTradeAccountReady()` returns `{ success, userId }` and checks login, the `trade` role and `password_set`. It runs before any data is read or changed in every trade action: add to cart, cart update and remove, checkout, Razorpay order creation, and order resubmission. (Input validation and the online-payment availability check may run just ahead of it, since they touch no data.)
    - Admin actions call `requireRole('admin')` and use the session user ID for attribution. The reviewer ID is never taken from the request.
+   - Intentionally public actions: contact, login, registration, forgot-password. Set-password and logout rely on the session.
 4. **Row-level security** for reads a user may do themselves.
 5. **Admin client** for trusted writes. Every action that uses it performs its own role and ownership checks first. The client's power is not itself an authorization check.
 
@@ -92,10 +95,10 @@ One private bucket, `po-uploads`, holds purchase orders at `{user_id}/{timestamp
 | `profiles` | A user can read their own row |
 | `cart_items` | An authenticated user can read and write their own rows |
 | `orders`, `order_items`, `order_status_history` | An authenticated user can read their own rows. All writes go through the admin client |
-| `trade_applications` | No access for `anon` or `authenticated`. Only the admin client touches it |
+| `trade_applications`, `auto_refunds` | No access for `anon` or `authenticated`. Only the admin client touches them |
 | `storage.objects` (`po-uploads`) | A user can insert and read their own files |
 
-**GRANT versus RLS.** Tables created by CLI migrations in this project did not receive automatic table grants. Postgres checks the grant before any policy, so every policy needs a matching explicit `GRANT`. Verify both separately: `pg_policies` for the policy, `information_schema.role_table_grants` for the grant.
+**GRANT versus RLS.** Tables created by CLI migrations in this project did not receive automatic table grants. Postgres checks the grant before any policy, so every policy needs a matching explicit `GRANT`, and the grant must cover every operation used, including those of operational scripts. Verify both separately: `pg_policies` for the policy, `information_schema.role_table_grants` for the grant.
 
 ### Account states
 
@@ -160,8 +163,9 @@ Each order line stores `unit_price_ex_gst_snapshot`, written once and never reca
 
 - The cart is stored in the database, not in browser storage, because browser-stored carts leaked between users sharing a browser.
 - **Adding** an item adds to the quantity already in the cart. A per-item cap of 9,999 applies to the resulting total and returns a clear error. The read-then-write is not atomic, so two simultaneous adds from different tabs can undercount; the add button disables while a request is in flight.
-- **Editing** a quantity saves on blur or Enter, validates 1–9,999, and reverts to the last saved value on any failure. Unpriced (upcoming) products cannot be added and block checkout if present.
-- **Checkout** requires a purchase order (PDF, JPG or PNG, up to 10 MB) for every order, whatever the payment method. The delivery address is the one on the approved registration and is shown read-only. There is no address override, because Florus is a licensed wholesaler and the delivery address is part of the verified registration.
+- **Editing** a quantity saves on blur or Enter, validates 1–9,999, and reverts to the last saved value on any failure. The row keeps the last saved quantity separate from the text in the box, and a guard prevents the Enter-then-blur sequence from saving twice. Unpriced (upcoming) products cannot be added and block checkout if present.
+- **Checkout** requires a purchase order for every order, whatever the payment method. The delivery address is the one on the approved registration and is shown read-only. There is no address override, because Florus is a licensed wholesaler and the delivery address is part of the verified registration.
+- **Purchase-order files** are validated by one shared module that runs in the browser (so a genuine file is accepted or refused before any payment) and again on the server (which is authoritative). It requires a non-empty file of at most 10 MB whose **actual bytes** identify it as a PDF, JPEG or PNG; the browser-declared type is never trusted. The storage path uses a sanitized name and the detected extension, and the stored content type comes from the detected type. The original filename is kept (truncated to 200 characters) for display. Resubmission uses the same module.
 - The payment method is a required choice with nothing preselected. "Pay Online" is rendered only when `isOnlinePaymentEnabled()` is true; both server actions refuse an online payment when it is false, and reject any method other than `cod` or `online`.
 
 ## 8. Order lifecycle
@@ -175,7 +179,7 @@ pending_verification ─► approved ─► fulfilled
 
 - Admin transitions: `pending_verification` → `approved`, `rejected` or `needs_revision`; `approved` → `fulfilled`. The trade user's only transition is resubmission from `needs_revision`. The rules live in `utils/orders/transitions.ts`.
 - Every transition re-reads the order's **current** status from the database immediately before acting, validates the transition, then writes the status and a history row. This prevents a stale or double-submitted form from moving an order that has already moved.
-- Resubmission also verifies ownership and that the status is exactly `needs_revision`, and validates the new file's type and size on the server. It clears `admin_feedback` and leaves payment data untouched.
+- Resubmission also verifies ownership and that the status is exactly `needs_revision`, and validates the new file on the server. It clears `admin_feedback` and leaves payment data untouched.
 - Rejection and revision both require written feedback, which is emailed to the customer.
 - Admins view the PO through two signed URLs (inline preview and forced download).
 
@@ -183,13 +187,28 @@ pending_verification ─► approved ─► fulfilled
 
 ### Checkout flow
 
-1. The user selects Pay Online, uploads the PO and presses Proceed to Payment.
+1. The user selects Pay Online, uploads the PO (validated in the browser) and presses Proceed to Payment.
 2. `createRazorpayOrderAction`: availability gate → account gate → server-side cart total → Razorpay order for that amount in paise (`INR`, `notes.userId`). It returns the order ID, amount and public key ID.
 3. The browser loads Razorpay Checkout dynamically and opens the modal.
 4. On success the browser calls `submitOrderAction` with the PO file and Razorpay's order ID, payment ID and signature.
-5. The server validates the method, the availability gate and the account, and verifies the HMAC-SHA256 signature of `order_id|payment_id` with the API secret using a constant-time comparison. It recomputes the cart total, then **asks Razorpay** for the payment and its order and requires all of: payment `captured` (briefly retried if not yet), belonging to that Razorpay order, in INR, for exactly the cart total in paise, and a Razorpay order created for this same user. Only then does it upload the PO and insert the order (`payment_status = captured`), items and history, clear the cart and send emails. A refunded payment reads `status: refunded` and therefore fails the check.
+5. The server, in this order: validates the payment method, the availability gate and the account; validates the PO file by its real type; verifies the HMAC-SHA256 signature of `order_id|payment_id` with the API secret using a constant-time comparison; recomputes the cart total; and **verifies the payment with Razorpay** (below). Only then does it upload the PO, insert the order (`payment_status = captured`), items and history, clear the cart and send emails. A failure to insert removes the uploaded file on a best-effort basis.
 6. If the user closes the modal, no order is created and no money moves.
-7. If verification fails (for example, the cart changed while the customer was paying), nothing is uploaded and no order is created. The payment stays captured at Razorpay, and the orphaned-payment alert tells admins to review it and refund it. A second order cannot reuse a payment: the unique indexes refuse it.
+
+### Payment verification (`verifyRazorpayPayment`)
+
+After the signature check, the server asks Razorpay for the payment and its order, and requires every one of these, in order:
+
+1. The payment can be fetched. It is briefly re-fetched (up to 4 more times, 1 second apart) only while its status is `created` or `authorized`.
+2. Its status is `captured` and `captured` is true. A refunded payment reads `status: refunded` and fails here.
+3. It belongs to the Razorpay order the browser named and is in INR.
+4. The Razorpay order's `notes.userId` is the caller and its amount equals the payment amount.
+5. The payment amount equals the server-computed cart total in paise.
+
+Failures return fixed customer-friendly messages; details (IDs only) go to server logs. Checks 3 and 4 never trigger a refund, because the payment may not be the caller's.
+
+**Cart changed during payment.** If checks 1–4 pass but the amount no longer matches the cart, the payment is genuine and belongs to the caller. The server refunds it **in full automatically**, records it in `auto_refunds`, creates no order, and tells the customer their cart changed and the payment was refunded. If the refund call itself fails, the customer is told our team will refund them, and the orphaned-payment alert (below) notifies the admins.
+
+**One payment, one order.** Unique indexes on `razorpay_payment_id` and `razorpay_order_id` refuse a second order for the same payment; the action reports it clearly and cleans up the uploaded file.
 
 ### Availability gate
 
@@ -207,12 +226,12 @@ Rejecting an order that was paid online (`payment_method = online`, `payment_sta
 
 ### Webhook (`/api/webhooks/razorpay`)
 
-The handler reads the raw body and verifies `X-Razorpay-Signature` against `RAZORPAY_WEBHOOK_SECRET`. A missing or invalid signature returns 400; a missing secret returns 500. Valid events are handled and the handler returns 200 even on internal errors so Razorpay does not retry endlessly. It runs with `maxDuration = 60`.
+The handler reads the raw body and verifies `X-Razorpay-Signature` against `RAZORPAY_WEBHOOK_SECRET`. A missing or invalid signature returns 400; a missing secret returns 500. Valid events are handled and the handler returns 200 even on internal errors so Razorpay does not retry endlessly. It runs with `maxDuration = 60`. It never calls the Razorpay API, because production has no API keys until go-live.
 
 | Event | Behavior |
 | --- | --- |
-| `payment.captured` | Looks for an order with that payment ID. If none exists yet, a background task (`after()`) re-checks every 5 seconds for up to about 40 seconds. If an order appears, nothing happens. If none appears, an *Orphaned Payment* alert is emailed. The grace window exists because this event can arrive before the checkout action has inserted the order |
-| `refund.processed` | Finds the order by refund ID, falling back to payment ID, and sets `payment_status = refunded` |
+| `payment.captured` | Looks for an order with that payment ID. If none exists yet, a background task (`after()`) re-checks every 5 seconds for up to about 40 seconds (the event can arrive before checkout has inserted the order). If still none, it looks up the payment in `auto_refunds`: a row means the payment was refunded automatically and no alert is sent. Otherwise an *Orphaned Payment* alert is emailed. A failure to read the ledger falls toward alerting |
+| `refund.processed` | Finds the order by refund ID, falling back to payment ID, and sets `payment_status = refunded`. An automatic refund has no order, which is logged and ignored |
 | `refund.failed` | Sets `refund_failed` and emails an urgent alert |
 
 Alert emails are awaited (directly, or inside `after()`), because un-awaited work after a serverless response is not guaranteed to complete.
@@ -226,6 +245,7 @@ Razorpay webhooks are registered per account and per mode. Test-mode events for 
 - **Resend** sends all mail from `Florus Enterprises <team@florus.in>` with reply-to `team@florus.in`. The domain's DKIM and SPF records are verified.
 - `sendEmail()` never throws; it returns `{ success, error }`. Callers log failures and continue.
 - Eighteen templates in `utils/email/templates.ts`: trade application (applicant, admin), approved, rejected, account activated; order submitted (customer, admin), approved, rejected, needs revision, resubmitted (customer, admin), fulfilled; contact confirmation; password reset, password changed; and two red alert templates (orphaned payment, refund failed) with their own wrapper.
+- **Escaping.** Every user- or admin-typed value placed in an HTML body (names, reasons, IDs, applicant type) goes through `escapeHtml`. Subjects are plain text, so they are not HTML-escaped, but line breaks are stripped from user-supplied parts. URLs the code builds itself, colour constants and formatted numbers are left as they are.
 - Admin notifications go to the `ADMIN_EMAILS` list.
 - Password-reset and invite emails go through Resend rather than Supabase's mailer, which needs custom SMTP before its templates can be edited.
 
@@ -233,7 +253,13 @@ Razorpay webhooks are registered per account and per mode. Test-mode events for 
 
 A client form posts to a server action. A hidden `website` field is a honeypot: if filled, the submission is silently discarded. Otherwise the server posts the fields to the Google Apps Script URL (as `text/plain`), which stores them in a Sheet and notifies the admins, and then sends the visitor a confirmation through Resend. A failed confirmation email does not fail the submission.
 
-## 12. Design system
+## 12. Abuse protection
+
+- **Rate limiting.** One Vercel Firewall custom rule, "Protect Public Forms", limits POST requests to `/contact`, `/trade/forgot-password`, `/trade/register` and `/trade/login` to 10 per 60 seconds per IP (fixed window, HTTP 429). Server Actions post to their page path, so one rule covers all four. Limits are per IP and counted per region; Hobby allows one rate-limit rule and no IP bypass. This stops casual abuse; it does not stop someone emailing one victim from many addresses.
+- **Input safety.** Purchase-order files are validated by real content on the server; email templates escape typed text; storage paths are sanitized; payment amounts and ownership are verified with Razorpay rather than trusted.
+- **Honeypot** on the contact form; **generic responses** on forgot-password.
+
+## 13. Design system
 
 - **Type:** page title `text-4xl font-bold` (home hero `text-5xl md:text-6xl`); section heading `text-2xl font-semibold`; card heading `text-lg font-semibold`; body `text-base`; secondary `text-sm text-gray-600`; captions `text-xs text-gray-500`.
 - **Spacing:** page container `py-12` (marketing pages `py-16`), rhythm `space-y-6` or `gap-6`, card padding `p-6`, widths `max-w-4xl` (dashboard and admin `max-w-6xl`).
@@ -241,7 +267,7 @@ A client form posts to a server action. A hidden `website` field is a honeypot: 
 - **Cards:** `border border-gray-200 rounded-lg p-6`, with `hover:border-[#009EE0] hover:shadow-md`.
 - **Responsive:** mobile first; `sm:`, `md:` and `lg:` breakpoints for columns. Admin pages are denser but follow the same scale.
 
-## 13. Environments
+## 14. Environments
 
 | Concern | Local | Production |
 | --- | --- | --- |
@@ -250,8 +276,9 @@ A client form posts to a server action. A hidden `website` field is a honeypot: 
 | Razorpay | Test keys in `.env.local` | No API keys; test webhook secret only, until go-live |
 | `NEXT_PUBLIC_SITE_URL` | `http://localhost:3000` | `https://www.florus.in` |
 | Online payment | Visible (test keys) | Hidden (no live keys) |
+| Firewall rate limit | None | "Protect Public Forms" |
 
-## 14. Deliberate decisions
+## 15. Deliberate decisions
 
 | Decision | Reason |
 | --- | --- |
@@ -260,20 +287,20 @@ A client form posts to a server action. A hidden `website` field is a honeypot: 
 | Registration details are read-only | Approval verifies them; changes go through the team |
 | Fixed registered delivery address | Chain of custody for a licensed wholesaler |
 | PO required for every order | Verification applies regardless of payment method |
-| Refund only on rejection | Needs-revision orders are expected to come back |
+| Refund on rejection, and on a cart mismatch during payment | Needs-revision orders are expected to come back, so they are never refunded |
+| Ledger table for automatic refunds | The webhook cannot call Razorpay in production, and the ledger doubles as an audit trail |
 | Single shared admin account | Accepted by the owner; no multi-admin plan |
 | Admin sees public pricing when browsing | Trade pricing is for trade accounts |
 | No catalog admin UI | Catalog changes are reviewed SQL migrations |
 | Public repository | Vercel Hobby cannot build private organization repositories; history was scanned for secrets first |
 
-## 15. Known limitations
+## 16. Known limitations
 
 - The database cannot yet be bootstrapped with a single command (categories are seeded outside migrations); see the README.
 - Local development and production share one Supabase project.
-- The first-checkout purchase order is validated for type and size in the browser; resubmission validates on the server.
 - The orphan-payment grace window is a heuristic. A purchase-order upload slower than about 40 seconds would still produce an alert, which is why the alert tells admins to check first.
-- If an order insert fails after the PO upload, the file is orphaned and only logged for manual cleanup.
+- The cart's add-to-quantity step is read-then-write, not atomic.
 - `/trade/dashboard` checks the role itself instead of using `requireRole`, so it does not redirect an account that has not finished onboarding.
+- Rate limiting is per IP and per region and limited to one rule on Hobby.
 - Production observability is thin: Vercel Hobby keeps runtime logs only briefly and Razorpay's test dashboard shows no webhook delivery history.
-- A payment refused at checkout (for example after a cart change) stays captured until an admin refunds it; there is no automatic refund for that case.
-- The customer-facing message for a refused payment currently includes internal amounts and should be made friendlier.
+- The Razorpay client objects in `verify-payment.ts` are typed loosely (`any`).

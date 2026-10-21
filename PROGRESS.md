@@ -2,21 +2,22 @@
 
 A dated log of what was built, the decisions behind it, and what was verified. Each entry records the final state of that checkpoint. Bugs found and their root causes are in [TROUBLESHOOTING.md](TROUBLESHOOTING.md); the system itself is described in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Dates come from migration timestamps, commits and deployment records. Entries marked "Sep 2026" have no recorded day. "Verified" always means a real observation (a terminal result, a database row, or a browser test), never code inspection alone.
+Dates come from commit dates, migration timestamps and deployment records. Entries marked "Sep 2026" have no recorded day. "Verified" always means a real observation (a terminal result, a database row, or a browser test), never code inspection alone.
 
-## Current state (October 15, 2026)
+## Current state (October 18, 2026)
 
 - Live at <https://www.florus.in>: public catalog of 228 products, trade registration and approval, trade pricing, cart, checkout with purchase-order upload, admin order review, and transactional email.
 - **Cash on delivery is live. Online payment is built and tested in Razorpay test mode but hidden in production** until live keys exist (account activation pending).
+- Online payments are verified with Razorpay before an order exists (captured, same order, same user, exact cart total), one payment can back only one order, and a payment made after the cart changed is refunded automatically.
 - Test-mode refund path verified end to end, including the webhook that marks refunds complete.
-- Each online payment is verified with Razorpay before an order is created (captured, same order, same user, amount equal to the cart total), and one payment can back only one order.
+- Purchase-order files are validated by real content on the server, emails escape typed text, and a Vercel Firewall rule rate-limits the public forms.
 
 ## Planned before go-live
 
-- Further input-validation and abuse-protection hardening (Checkpoint 35).
+- Razorpay account activation (including the paused-settlement issue), live API keys and a live webhook (steps in the README), then a small real-payment check.
 - Remove or secure the demo trade accounts, clear test orders, and decide whether production should have its own Supabase project (local development and production share one today).
+- Record a behavioral test of the rate-limit rule (about a dozen rapid submissions of the forgot-password form should be refused with 429).
 - Seed categories in a migration so a new database builds in one step.
-- Razorpay account activation, live keys and a live webhook (steps in the README).
 - Florus to supply the missing SAP code for TELMICLAR TAB 40MG,15'S.
 
 ---
@@ -158,5 +159,33 @@ Dates come from migration timestamps, commits and deployment records. Entries ma
 - Before an order is created, the server fetches the payment and its Razorpay order and requires: payment captured, belonging to that Razorpay order, in INR, for exactly the server-computed cart total, and created for the same user. The checkout signature is now compared in constant time.
 - Unique database indexes allow only one order per Razorpay payment and per Razorpay order. A duplicate is refused with a clear message.
 - Razorpay's API was checked against a real test payment first: amounts are numbers in paise, a fully refunded payment reads `status: refunded` (so refunded payments cannot be reused), and the Razorpay order carries the user ID.
-- Verified: index migration applied and a duplicate insert rejected (`23505`); a normal paid order created, rejected and refunded, with the webhook setting `refunded`; and a payment made after the cart changed was refused with no order created, followed by the orphaned-payment alert for the still-captured test payment.
-- Follow-up: the customer-facing error text currently shows internal amounts and should be made friendlier.
+- Verified: index migration applied and a duplicate insert rejected (`23505`); a normal paid order created, rejected and refunded, with the webhook setting `refunded`; and a payment made after the cart changed was refused with no order created.
+
+### Checkpoint 35 — Friendly payment errors and automatic refund · Oct 17, 2026
+- Customer-facing payment errors are now fixed friendly sentences with no amounts or exception text; details go to the server log.
+- When a genuine payment belonging to the caller's own Razorpay order no longer matches the cart (the cart changed while paying), it is refunded in full automatically and the customer is told. No refund is attempted when the payment's order, currency or owner does not match.
+- Verified: a normal paid order still worked and was refunded on rejection; a cart changed during payment produced the friendly message, a full refund in Razorpay and no order. An orphaned-payment alert still arrived, which led to Checkpoint 36.
+
+### Checkpoint 36 — Ledger of automatic refunds · Oct 17, 2026
+- New `auto_refunds` table (service role only), written when an automatic refund succeeds. The webhook's orphan check consults it instead of the Razorpay API, because the webhook runs on production, which has no API keys.
+- Verified: the ledger row was written, no orphan alert arrived for two minutes, a signed fake orphan with no ledger row still alerted about 45 seconds later, and a normal order and refund were unaffected.
+
+### Vercel Firewall rate limit · Oct 17, 2026
+- One custom rule, "Protect Public Forms": POST to `/contact`, `/trade/forgot-password`, `/trade/register` and `/trade/login`, fixed window of 60 seconds, 10 requests per IP, response 429. It saved on the Hobby plan with no pricing prompt.
+- Verified: the rule is configured and enabled in the dashboard. A behavioral test has not yet been recorded.
+
+### Checkpoint 37 — Purchase-order validation by real content · Oct 17, 2026
+- One shared module (browser and server) checks size, emptiness and the file's actual leading bytes (PDF, JPEG, PNG); storage paths are sanitized and use the detected extension and content type. Resubmission uses it too.
+- Verified: the byte detection and path sanitizing against crafted inputs; in the browser a text file renamed `.pdf` and an 11 MB file were refused; a JPG order, an online-payment order (clean path) and a resubmission all worked.
+
+### Checkpoint 38 — Email escaping · Oct 18, 2026
+- All typed text in email HTML bodies is escaped; line breaks are stripped from user-supplied parts of subjects.
+- Verified: hostile input produced no live markup in four templates and a one-line subject; a real application named `<b>Test</b> & Co` showed literally in the admin email and admin page.
+
+### Checkpoint 39 — Reset script, cart double-save, dead constants · Oct 18, 2026
+- The reset script now deletes pending and rejected applications, requests real counts, and clears `auto_refunds`. The cart no longer saves twice on Enter followed by blur. Two unused constants were removed.
+- The script's first run stopped at the ledger step because the service role had no `DELETE` on `auto_refunds`; a small migration granted it.
+- Verified: one cart request per Enter-then-blur; after the grant, a reset run deleted one ledger row and one pending application, and the verification matched exactly (0 carts, 0 orders, 0 refunds, 4 applications, 4 profiles, 5 auth users).
+
+### Documentation refresh · Oct 18, 2026
+- README, ARCHITECTURE, TROUBLESHOOTING and PROGRESS rewritten again as whole documents covering Checkpoints 34–39, the refund ledger, PO validation, email escaping, the rate-limit rule and the grant lesson.

@@ -15,12 +15,13 @@ Real problems met while building and testing this platform, with their **actual 
 
 ## 1. Database and Supabase
 
-### 1.1 `permission denied for table X` despite a correct RLS policy
+### 1.1 `permission denied for table X` despite a correct RLS policy or grant
 
 - **Symptom:** a table with RLS enabled and a correct policy still failed with `permission denied`.
-- **Root cause:** Postgres checks the table-level `GRANT` for the role first and evaluates policies only if that passes. Tables created by Supabase CLI migrations in this project did not receive automatic grants. The same gap appeared for `products` and `categories`, for `profiles` (both reads and the service role's writes), and was then closed pre-emptively for the cart, order and storage tables.
-- **Fix:** pair every policy with an explicit `GRANT` migration, and verify both independently: `pg_policies` for the policy, `information_schema.role_table_grants` for the grant.
-- **Lesson:** a verified policy is not evidence that access works.
+- **Root cause:** Postgres checks the table-level `GRANT` for the role first and evaluates policies only if that passes. Tables created by Supabase CLI migrations in this project did not receive automatic grants. The gap appeared for `products` and `categories`, for `profiles` (reads and the service role's writes), and was then closed pre-emptively for the cart, order and storage tables.
+- **It happened again with `auto_refunds`:** the table was created with `grant select, insert` for the service role, and a later script tried to `delete` from it, which failed with `42501`. The error's hint named the missing grant.
+- **Fix:** pair every policy with an explicit `GRANT` migration covering **every operation the app and its scripts use**, and verify both independently: `pg_policies` for the policy, `information_schema.role_table_grants` for the grant.
+- **Lesson:** a verified policy, or a partial grant, is not evidence that access works. Read the grant list against what the code actually does.
 
 ### 1.2 `order_items` insert failed: `gst_percent` does not exist
 
@@ -65,11 +66,12 @@ Real problems met while building and testing this platform, with their **actual 
 - **Consequence:** registering `Doctor@florus.in` bypassed the duplicate-account check.
 - **Fix:** registration trims and lowercases email before every use; password reset retries once with a lowercased address.
 
-### 1.10 The reset script leaves pending and rejected applications behind
+### 1.10 The reset script left pending and rejected applications behind
 
 - **Symptom:** after a reset, the verification step reported 5 applications where 4 (the demo accounts) were expected.
-- **Root cause:** the script deletes applications whose `linked_profile_id` is `NOT IN` the preserved IDs. In SQL, `NULL NOT IN (...)` is never true, and pending or rejected applications have no linked profile, so they are never deleted. The script's "Deleted N" lines are also unreliable, because the delete calls do not request a count and the script prints 0.
-- **Status:** open. Workaround: delete the leftover rows in the SQL editor; trust the verification counts. A fix (choose rows to delete in code, delete by ID, request real counts) is planned.
+- **Root cause:** the script deleted applications whose `linked_profile_id` was `NOT IN` the preserved IDs. In SQL, `NULL NOT IN (...)` is never true, and pending or rejected applications have no linked profile, so they were never deleted. Its "Deleted N" lines were also meaningless, because the delete calls did not request a count and the script printed 0.
+- **Fix:** the script now fetches the applications, chooses in code the ones to delete (no linked profile, or linked to a non-demo account), deletes by ID, requests real counts on every delete, and also clears `auto_refunds`.
+- **Verified:** a run reported real counts, deleted a pending application and one ledger row, and the verification matched (0 carts, 0 orders, 0 refunds, 4 applications, 4 profiles, 5 auth users). Its first run stopped at the ledger step for the reason in 1.1.
 
 ---
 
@@ -101,8 +103,8 @@ Real problems met while building and testing this platform, with their **actual 
 ### 2.5 Application approve and reject trusted the caller
 
 - **Symptom (found in review, not by a user report):** the two application actions took `adminUserId` from the submitted form and never verified the caller was an admin, while using the service-role client. Approval returns a live invite URL.
-- **Fix:** both actions call `requireRole('admin')` first and use the session user as the reviewer. The client no longer sends an ID.
-- **Lesson:** a Server Action is a public endpoint. Page-level checks do not protect it; each action needs its own check. Audit every exported action for its gate.
+- **Fix:** both actions call `requireRole('admin')` first and use the session user as the reviewer. The client no longer sends an ID. A full audit then confirmed every other exported action is gated, tied to the session, or intentionally public.
+- **Lesson:** a Server Action is a public endpoint. Page-level checks do not protect it; each action needs its own check.
 
 ### 2.6 A reset showed "Failed to set password" for reusing the old password
 
@@ -127,7 +129,7 @@ Real problems met while building and testing this platform, with their **actual 
 
 - **Symptom:** changing a quantity updated the row on screen, but the total stayed, and a refresh restored the old value. No network request was made.
 - **Root cause:** the input's change handler updated the quantity state on every keystroke, and the blur handler then compared the typed value to that same state ("did it change?"). It was always equal, so it returned before calling the server. The failure-revert path restored the already-changed value, so it could not revert anything.
-- **History:** present since the commit that introduced the cart (Checkpoint 5). An earlier progress entry claimed quantity editing was verified in a browser; that claim was wrong.
+- **History:** present since the commit that introduced the cart. An earlier progress entry claimed quantity editing was verified in a browser; that claim was wrong.
 - **Fix:** keep the last saved quantity separate from the text in the input; save on blur or Enter; revert to the saved value on any failure.
 - **Lesson:** "verified" must name the evidence. A claim without a recorded observation is a guess.
 
@@ -135,6 +137,20 @@ Real problems met while building and testing this platform, with their **actual 
 
 - **Root cause:** the upsert overwrote the existing quantity while a comment claimed it incremented. Adding 5 and then 3 left 3.
 - **Fix:** read the current quantity, add, and cap the total at 9,999 with a clear error.
+
+### 3.4 One quantity edit saved twice
+
+- **Symptom:** the server log showed two cart-update calls after pressing Enter in the quantity box.
+- **Root cause:** Enter started a save; disabling the input while it ran made the field lose focus, and the blur started a second save before the first had finished.
+- **Fix:** a ref-based in-flight guard at the top of the save function.
+- **Verified:** one request per Enter-then-blur.
+
+### 3.5 The server trusted the browser's file type and filename
+
+- **Found in review:** the first-checkout purchase order was checked for type and size only in the browser; the server stored it under the browser-declared content type, with the raw filename in the storage path.
+- **Fix:** one shared module identifies PDF, JPEG and PNG by their actual leading bytes and checks size and emptiness, and runs in the browser and on the server. Storage paths use a sanitized name and the detected extension; the stored content type is the detected one.
+- **Design point:** because the browser runs the same check, a genuine file never passes the client and then fails on the server after an online payment has been taken.
+- **Verified:** the logic against crafted bytes and hostile names; in the browser, a text file renamed `.pdf` and an 11 MB file were refused; real PDF, JPG and PNG orders and a resubmission worked.
 
 ---
 
@@ -156,10 +172,7 @@ Real problems met while building and testing this platform, with their **actual 
 - Because local and production share a Supabase project, the production endpoint updates locally created orders. This is how the `refunded` transition was verified.
 - The Razorpay test dashboard showed no delivery history. Vercel Hobby runtime logs last only briefly. Plan production tests so the evidence can be read promptly.
 - Razorpay's documented behavior: non-2xx responses are retried with backoff for 24 hours, a webhook that keeps failing is disabled, and failed events can be replayed for 15 days.
-
-### 4.3.1 Webhook route checklist
-
-- Invalid or missing signature returns 400 (both verified against production). A missing secret would return 500, so a 400 on a bogus signature also proves the secret is configured.
+- Webhook route checks: an invalid or missing signature returns 400 (verified against production). A missing secret would return 500, so a 400 on a bogus signature also proves the secret is configured.
 
 ### 4.4 "Pay Online" appeared on production with no Razorpay keys
 
@@ -185,7 +198,7 @@ Real problems met while building and testing this platform, with their **actual 
 - **Found in review, not by a user report:** checkout verified only Razorpay's signature.
 - **Root cause:** the signature proves that an order ID and payment ID are a genuine pair. It does not prove the amount equals the cart, nor that the payment has not been used before. Someone could pay for a small cart, fill the cart with more items, and submit the same payment, getting a larger order marked as paid; the same payment could also back several orders.
 - **Fix:** the server asks Razorpay for the payment and its order and requires captured status, the matching Razorpay order, INR, the exact cart total in paise, and the same user. Unique indexes on the payment and order IDs allow one order per payment. The signature is compared in constant time.
-- **Verified:** a duplicate insert was refused with `23505`. A normal paid order still worked end to end. A payment made after the cart changed was refused with no order created, and the orphaned-payment alert followed.
+- **Verified:** a duplicate insert was refused with `23505`. A normal paid order still worked end to end. A payment made after the cart changed was refused with no order created.
 - **Lesson:** verifying that a message is authentic is not the same as verifying that it means what the order needs. Check the amount and the one-time use.
 
 ### 4.8 A refunded payment still reports `captured: true`
@@ -193,12 +206,32 @@ Real problems met while building and testing this platform, with their **actual 
 - **Observed against Razorpay's API:** a fully refunded test payment returned `status: refunded` while `captured` stayed `true`. Amounts come back as numbers in paise.
 - **Consequence:** verification must check `status`, not just the boolean. A refunded payment then fails the "captured" requirement.
 
+### 4.9 A customer whose cart changed while paying was charged and shown internal numbers
+
+- **First behavior:** the order was refused with a message containing the expected and paid amounts, and the payment stayed captured until an admin refunded it.
+- **Fix:** customer-facing errors are now fixed, friendly sentences with no amounts or exception text (details go to server logs). When the payment is genuine, belongs to the caller's own Razorpay order, and only the amount differs, it is refunded in full automatically. Refunds are never attempted when the payment's order, currency or owner does not match.
+- **Verified:** the friendly message appeared, Razorpay showed the payment refunded, and no order was created.
+
+### 4.10 The orphan alert still fired after an automatic refund
+
+- **Observation:** after the automatic refund was added, an orphaned-payment alert still arrived for the refunded payment.
+- **Root cause:** the first suppression asked the Razorpay API whether the payment was refunded, but the webhook runs on **production**, which deliberately has no API keys. The check always failed and fell back to alerting. This was a mistake in the test plan too: the expectation of "no alert" ignored where the code runs.
+- **Fix:** each successful automatic refund is recorded in the `auto_refunds` table, and the webhook consults that table, which needs no API access. A failure to read it still falls toward alerting.
+- **Verified:** the ledger row was written, no alert arrived for two minutes, and a fake orphan with no ledger row still alerted about 45 seconds later.
+- **Lesson:** design checks around what the running environment actually has.
+
 ---
 
 ## 5. Email
 
 - **Email links must not point at localhost.** A mail provider flagged localhost links. `NEXT_PUBLIC_SITE_URL` must be the production URL in Vercel and is inlined at build time, so it needs a redeploy.
 - **Not delivered is not always a bug.** One order-fulfilled email showed "Sent" but not "Delivered" once; the next send delivered.
+
+### 5.3 User-typed text was placed into HTML emails unescaped
+
+- **Found in review:** names, rejection reasons and similar text were interpolated directly into email HTML, so a crafted value would render as markup in mail sent from `team@florus.in`, including to the admins.
+- **Fix:** every typed value in an HTML body is HTML-escaped; line breaks are stripped from user-supplied parts of subjects. Self-built URLs, colour constants and formatted numbers are left alone.
+- **Verified:** hostile input produced no live markup in four templates, and a subject with an injected line break came out as one line. A real application named `<b>Test</b> & Co` showed literally in the admin email and the admin page.
 
 ---
 
@@ -227,12 +260,19 @@ They cannot reach the hosted database. Run verification SQL in the Supabase SQL 
 
 `&&` is not a valid separator; run commands separately. Paths with `[brackets]` need `-LiteralPath`. `Invoke-WebRequest` prompts about script parsing unless `-UseBasicParsing` is used.
 
-### 6.5 Process lessons from working with an AI coding agent
+### 6.5 Vercel Hobby limits that shaped the design
+
+- Runtime logs are retained only briefly, so production tests must be read promptly.
+- Firewall custom rules are capped, with one rate-limit rule per project, per-IP counting per region and no IP bypass. See ARCHITECTURE section 12.
+- Background work after a response must use `after()` (with a `maxDuration` the plan allows), not an un-awaited promise.
+
+### 6.6 Process lessons from working with an AI coding agent
 
 - **Claims need evidence.** "Build passed" and "should work" are not verification. Evidence is terminal output, database rows, a diff, or an executed test.
 - **Watch for downgraded tests,** such as "will verify in the browser" next to a checked box.
-- **Do not let the agent write documentation.** It fabricated plausible progress entries twice (one was committed and then reverted), and later edited a documentation file again against explicit instructions. Documentation is written by hand from verified facts; the standing rules are in `AGENTS.md`. Check `git status` and the full diff before every commit, because an unrequested file can slip in.
+- **Do not let the agent write documentation.** It fabricated plausible progress entries twice (one was committed and then reverted), and later edited a documentation file again against explicit instructions. Documentation is written by hand from verified facts; the standing rules are in `AGENTS.md`.
 - **Separate proven facts from guesses.** "Transient Razorpay issue" and "possibly rate limiting" were guesses stated as facts. Write "cause unknown" when it is.
+- **Review every diff before committing,** confirm `.env.local` never appears, and confirm the pushed commit with `git log --oneline -3`. Check `git status` too, because an unrequested file can slip in.
 - **Never print a secret.** Any credential that appears in chat, logs or terminal output you do not control is compromised; rotate it. (This happened once with a generated admin password.) Secrets go to `.env.local` or the host's settings directly.
-- **Review every diff before committing,** confirm `.env.local` never appears, and confirm the pushed commit with `git log --oneline -3`.
 - **Verify live facts about external services** (Razorpay, Vercel, Supabase) from their documentation before depending on them, and say what was and was not verified.
+- **A review by reading is not a test.** Several real bugs (cart editing, the missing grant, the production-only alert behavior) were only found by running the flow in the environment where it matters.

@@ -18,9 +18,9 @@ Production site: <https://www.florus.in>
 | Transactional email | Resend (verified domain `florus.in`) |
 | Online payments | Razorpay (test mode today; live mode pending account activation) |
 | Contact form storage | Google Apps Script web app writing to a Google Sheet |
-| Hosting | Vercel (Hobby plan), custom domain `www.florus.in` |
+| Hosting | Vercel (Hobby plan), custom domain `www.florus.in`, one Firewall rate-limit rule |
 
-How the pieces fit together is described in [ARCHITECTURE.md](ARCHITECTURE.md). Past problems and their root causes are in [TROUBLESHOOTING.md](TROUBLESHOOTING.md). The dated build log is [PROGRESS.md](PROGRESS.md).
+How the pieces fit together is in [ARCHITECTURE.md](ARCHITECTURE.md). Past problems and their root causes are in [TROUBLESHOOTING.md](TROUBLESHOOTING.md). The dated build log is [PROGRESS.md](PROGRESS.md).
 
 ## Quick start
 
@@ -44,6 +44,8 @@ The database was built up incrementally: categories were seeded early from `supa
 
 Expected workaround for a new database (not yet exercised end to end): run `db push`, let it stop at `20260902060354_full_catalog_import.sql`, execute only the `categories` insert from `supabase/seed.sql` in the Supabase SQL editor, then run `db push` again. Moving category seeding into a migration would remove this caveat.
 
+When adding a table, grant the privileges the app and its scripts actually use (including `delete` where a script clears it); a policy or a partial grant is not enough. See TROUBLESHOOTING 1.1.
+
 ## Environment variables
 
 Create `.env.local` in the project root. It is gitignored (`.env*`) and must never be committed. The repository is public.
@@ -57,10 +59,10 @@ Create `.env.local` in the project root. It is gitignored (`.env*`) and must nev
 | `RESEND_API_KEY` | Sends all transactional email | The email module throws at import if missing |
 | `GOOGLE_APPS_SCRIPT_CONTACT_URL` | Contact-form endpoint | Treat as a write credential |
 | `RAZORPAY_KEY_ID` | Razorpay API key ID | Together with the next two, enables online payment (see below) |
-| `RAZORPAY_KEY_SECRET` | Razorpay API secret | Used to create orders, refund, and verify checkout signatures |
+| `RAZORPAY_KEY_SECRET` | Razorpay API secret | Used to create orders, refund, verify payments and checkout signatures |
 | `RAZORPAY_WEBHOOK_SECRET` | Webhook signature secret | A different secret from the API secret. Test and live webhooks have different secrets |
 
-Online payment is offered only when all three Razorpay variables are present. In a production build the key ID must also start with `rzp_live_`, so test keys can never enable it on the live site. Production therefore has no Razorpay API keys until the account is live. It holds only the test webhook secret, which the webhook route needs to verify events.
+Online payment is offered only when all three Razorpay variables are present. In a production build the key ID must also start with `rzp_live_`, so test keys can never enable it on the live site. Production therefore has no Razorpay API keys until the account is live. It holds only the test webhook secret, which the webhook route needs to verify events. Because production has no API keys, the webhook route deliberately never calls the Razorpay API.
 
 **Local development and production currently share one Supabase project.** Orders created locally are real rows in the production database. A webhook event for a locally created payment is processed by the production endpoint.
 
@@ -72,7 +74,7 @@ Online payment is offered only when all three Razorpay variables are present. In
 | `scripts/seed-admin.ts` | Creates or verifies the single admin account. Reusable, idempotent |
 | `scripts/reset-test-data.ts` | Clears test activity. **Destructive** |
 
-`reset-test-data.ts` deletes all carts, all orders (with items and history), all uploaded PO files, and every trade account except the admin and four demo accounts (doctor, hospital, pharmacy, retailer). Their IDs are hardcoded at the top of the script and belong to the current Supabase project; edit them before using the script against any other database. Because local and production share a project, running it affects production data. Known gap: it does not delete applications that have no linked profile (pending or rejected ones), because its filter skips null values; delete those rows in the Supabase SQL editor until the script is fixed. Its "Deleted N" lines are also unreliable, so trust the verification counts at the end.
+`reset-test-data.ts` deletes all carts, all orders (with items and history), all uploaded PO files, the automatic-refund ledger, every application that is not linked to a preserved demo account (including pending and rejected ones), and every trade account except the admin and four demo accounts (doctor, hospital, pharmacy, retailer). Their IDs are hardcoded at the top of the script and belong to the current Supabase project; edit them before using the script against any other database. It prints real deletion counts and a verification summary, and finishes with a warning if any count is unexpected. It is safe to re-run if it stops partway. Because local and production share a project, running it affects production data.
 
 Any other script in `scripts/` is a one-off that should have been deleted after use.
 
@@ -91,9 +93,9 @@ src/
   components/           Header, Footer
   utils/
     auth/               requireRole, requireTradeAccountReady, getSessionUser, getAuthHomeRoute
-    email/              Resend client, sendEmail, templates, ADMIN_EMAILS
-    orders/             state machine (transitions), calculateCartTotal
-    razorpay/           SDK client, isOnlinePaymentEnabled
+    email/              Resend client, sendEmail, templates (with escaping), ADMIN_EMAILS
+    orders/             state machine (transitions), calculateCartTotal, PO file validation
+    razorpay/           SDK client, isOnlinePaymentEnabled, verifyRazorpayPayment
     supabase/           browser, server, middleware and admin clients
     trade/              registration detail lookup
     pricing.ts          trade price and GST math
@@ -117,9 +119,10 @@ public/                 logo, favicons, web manifest
 - **New trade application.** Admins get an email. Review it at `/admin/applications`. Approving creates the account and emails the applicant a password-setup link; the same link is shown to the admin for manual relay. Rejecting requires a reason, which is emailed to the applicant.
 - **New order.** Admins get an email. Review the order and its uploaded purchase order at `/admin/orders`. Approve, send back for revision, or reject. Approved orders are later marked fulfilled.
 - **Rejecting a paid-online order** refunds the full amount automatically. The order page shows the payment status (`refund_initiated`, then `refunded` once Razorpay confirms by webhook).
+- **A customer's cart changes while they are paying.** Checkout refuses the order, refunds the payment in full automatically and tells the customer to review their cart. The refund is recorded in the `auto_refunds` table. Nothing is needed from an admin.
 - **Alert emails** go to the addresses in `ADMIN_EMAILS` (`src/utils/email/admin-recipients.ts`):
   - *Refund Failed*: the order was rejected but the refund did not go through. Refund the payment manually in the Razorpay Dashboard. The webhook matches refunds by payment ID, so the order should update itself; verify on the order page.
-  - *Orphaned Payment*: sent only if a captured payment still has no order 40 seconds later. First search `/admin/orders` for the payment ID. If there is truly no order, contact the customer and either create the order manually or refund in the Razorpay Dashboard. The same alert follows when checkout refuses a payment because it does not match the order (for example, the cart changed while the customer was paying): that customer has been charged and needs a refund.
+  - *Orphaned Payment*: sent only if a captured payment still has no order 40 seconds later and was not automatically refunded. First search `/admin/orders` for the payment ID. If there is truly no order, contact the customer and either create the order manually or refund in the Razorpay Dashboard. This alert also covers the case where checkout refused a payment and the automatic refund itself failed: the customer has been charged and needs a manual refund.
 - **Customer detail changes.** Trade users cannot edit their registration details. They are asked to email `team@florus.in`.
 
 ## Deployment
@@ -129,7 +132,8 @@ The site deploys from `main` on Vercel. Vercel Hobby cannot build private organi
 1. Set the environment variables above for the **Production** environment. A new deployment is required for any change to take effect.
 2. Domain: `www.florus.in` is canonical; `florus.in` redirects to it.
 3. Razorpay webhook: register `https://www.florus.in/api/webhooks/razorpay` for `payment.captured`, `refund.processed` and `refund.failed`, with its own secret stored as `RAZORPAY_WEBHOOK_SECRET`.
-4. Vercel Hobby runtime logs are retained only briefly, and the Razorpay test dashboard shows no delivery history, so check logs promptly after any production test.
+4. Vercel Firewall: one custom rule, "Protect Public Forms", rate-limits POST requests to `/contact`, `/trade/forgot-password`, `/trade/register` and `/trade/login` to 10 requests per 60 seconds per IP (HTTP 429). Hobby allows only one rate-limit rule and has no IP bypass, so heavy testing from one network can briefly block those forms.
+5. Vercel Hobby runtime logs are retained only briefly, and the Razorpay test dashboard shows no delivery history, so check logs promptly after any production test.
 
 ### Going live with online payments
 
@@ -139,8 +143,8 @@ Online payment stays hidden until every step below is done.
 2. Generate live API keys.
 3. Register a **live-mode** webhook for the same URL and events. It has its own secret.
 4. In Vercel Production set `RAZORPAY_KEY_ID` (`rzp_live_...`), `RAZORPAY_KEY_SECRET`, and replace `RAZORPAY_WEBHOOK_SECRET` with the live secret. Redeploy.
-5. Complete the items under "Planned before go-live" in [PROGRESS.md](PROGRESS.md). Remove or secure the demo trade accounts and clear test orders (`reset-test-data.ts` preserves the demo set, so delete those accounts separately), because local development and production share one database.
-6. Make a small real payment, reject the order, and confirm the refund and the `refunded` status. Confirm alert emails reach every address in `ADMIN_EMAILS`.
+5. Remove or secure the demo trade accounts and clear test orders (`reset-test-data.ts` preserves the demo set, so delete those accounts separately), and decide whether production should get its own Supabase project, because local development and production share one database.
+6. Make a small real payment, reject the order, and confirm the refund and the `refunded` status. Repeat the cart-changes-while-paying case and confirm an automatic refund, a ledger row and no orphan alert. Confirm alert emails reach every address in `ADMIN_EMAILS`.
 
 ## Known open items
 
