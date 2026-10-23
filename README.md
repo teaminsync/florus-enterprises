@@ -152,6 +152,7 @@ Online payment stays hidden until every step below is done.
 - **Razorpay settlement is paused** in test mode pending account activation.
 - **One unexplained refund failure** (Razorpay returned `BAD_REQUEST_ERROR` once, the identical retry succeeded). Monitor; escalate to Razorpay support if it recurs.
 - **`ADMIN_EMAILS` is hardcoded** in source rather than configured by environment.
+- **Rate-limited forms show a generic error page.** The Firewall rule works (verified on production), but a visitor who hits the limit sees Next.js's "This page couldn't load" page, not a friendly message.
 - **Next.js `middleware` file convention is deprecated** in favor of `proxy`; the build warns and no migration has been done.
 - **Content not yet supplied by Florus** and therefore not published: typical approval time for trade applications, minimum order value, order-to-delivery timeline, order status update channel.
 

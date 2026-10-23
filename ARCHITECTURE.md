@@ -255,7 +255,7 @@ A client form posts to a server action. A hidden `website` field is a honeypot: 
 
 ## 12. Abuse protection
 
-- **Rate limiting.** One Vercel Firewall custom rule, "Protect Public Forms", limits POST requests to `/contact`, `/trade/forgot-password`, `/trade/register` and `/trade/login` to 10 per 60 seconds per IP (fixed window, HTTP 429). Server Actions post to their page path, so one rule covers all four. Limits are per IP and counted per region; Hobby allows one rate-limit rule and no IP bypass. This stops casual abuse; it does not stop someone emailing one victim from many addresses.
+- **Rate limiting.** One Vercel Firewall custom rule, "Protect Public Forms", limits POST requests to `/contact`, `/trade/forgot-password`, `/trade/register` and `/trade/login` to 10 per 60 seconds per IP (fixed window, HTTP 429). Server Actions post to their page path, so one rule covers all four. Limits are per IP and counted per region; Hobby allows one rate-limit rule and no IP bypass. Verified on production: a dozen rapid submissions of the forgot-password form were cut off and the Firewall view recorded the hit. This stops casual abuse; it does not stop someone emailing one victim from many addresses.
 - **Input safety.** Purchase-order files are validated by real content on the server; email templates escape typed text; storage paths are sanitized; payment amounts and ownership are verified with Razorpay rather than trusted.
 - **Honeypot** on the contact form; **generic responses** on forgot-password.
 
@@ -302,5 +302,6 @@ A client form posts to a server action. A hidden `website` field is a honeypot: 
 - The cart's add-to-quantity step is read-then-write, not atomic.
 - `/trade/dashboard` checks the role itself instead of using `requireRole`, so it does not redirect an account that has not finished onboarding.
 - Rate limiting is per IP and per region and limited to one rule on Hobby.
+- A rate-limited submission (HTTP 429) is not caught by the login, forgot-password and registration forms, so the visitor sees Next.js's generic "This page couldn't load" page instead of a friendly message.
 - Production observability is thin: Vercel Hobby keeps runtime logs only briefly and Razorpay's test dashboard shows no webhook delivery history.
 - The Razorpay client objects in `verify-payment.ts` are typed loosely (`any`).

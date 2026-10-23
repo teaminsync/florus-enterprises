@@ -264,6 +264,7 @@ They cannot reach the hosted database. Run verification SQL in the Supabase SQL 
 
 - Runtime logs are retained only briefly, so production tests must be read promptly.
 - Firewall custom rules are capped, with one rate-limit rule per project, per-IP counting per region and no IP bypass. See ARCHITECTURE section 12.
+- A rate-limited Server Action returns HTTP 429 before reaching the app, and the login, forgot-password and registration forms do not catch that failure, so the visitor sees Next.js's generic "This page couldn't load" page. Verified on production: about a dozen rapid forgot-password submissions were cut off and the Firewall view recorded one rate-limited event for the rule. A friendly message would need the forms to catch the failed call.
 - Background work after a response must use `after()` (with a `maxDuration` the plan allows), not an un-awaited promise.
 
 ### 6.6 Process lessons from working with an AI coding agent
